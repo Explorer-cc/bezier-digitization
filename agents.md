@@ -69,7 +69,7 @@ The current implementation direction is to keep building a unified Paper.js obje
 
 Already implemented for that goal:
 
-- Reference images are selectable objects with move, resize (4 corners, pending fix), opacity, lock, fit, and reset-transform actions.
+- Reference images are selectable objects with move, 8-handle resize, rotation, opacity, lock, fit, and reset-transform actions.
 - Curves are selectable objects on the canvas, not only in the right-side list.
 - A single selected curve exposes editable anchors and Bezier control handles directly on canvas.
 - Multiple selected curves support batch color and stroke-width editing.
@@ -77,11 +77,12 @@ Already implemented for that goal:
 - UI has been extracted into eight components: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
 - Grid-point snapping applies to both brush drawing and curve anchor/control-handle dragging, with the same green preview circle and status feedback.
 - Closed-path snapping works during curve anchor dragging: dragging the first or last anchor of an open curve near the opposite endpoint snaps and auto-closes the curve, using the same snap radius and green preview circle.
+- Image resize handles now include 4 corners and 4 edge midpoints, with hover resize cursors.
+- Image rotation is available through a top drag handle above the selected image, with a custom curved-arrow rotate cursor.
+- Holding `Shift` while resizing an image preserves the current aspect ratio, including for rotated images.
 
 Still remaining for that goal:
 
-- Fix image corner resize handles and extend to 8 handles (4 corners + 4 edge midpoints).
-- Add image rotation via top-center drag handle (Figma-style).
 - Add on-canvas lock toggle and opacity control rendered as Paper.js graphics at the image top-right corner.
 - Richer multi-curve editing affordances beyond batch styling and single-curve handle editing.
 - Project save/load for image, curves, and calibration state.
@@ -125,15 +126,14 @@ Already present in some form:
 - Closed-path snap preview indicator while drawing.
 - Grid-point snapping to calibrated integer coordinate intersections.
 - Local persistence for brush post-processing and snap settings.
-- Reference image object selection, movement, corner-handle resizing (4 corners, pending fix to 8 handles), opacity control, locking, fit-to-canvas, and reset-transform actions.
+- Reference image object selection, movement, 8-handle resizing, rotation, opacity control, locking, fit-to-canvas, and reset-transform actions.
+- Equal-aspect image resize with `Shift` modifier.
 - Canvas click selection for curve objects.
 - Single-curve anchor and control-handle editing on canvas.
 - Batch stroke-color and stroke-width editing for multiple selected curves.
 
 Still incomplete or not yet implemented:
 
-- Image resize handles fix: extend from 4 corners to 8 handles (4 corners + 4 edge midpoints), fix non-functional corner resize.
-- Image rotation: drag handle above image for rotation around center.
 - On-canvas image controls: lock toggle and opacity indicator as Paper.js graphics on the selection overlay.
 - Shared stores in `src/stores.ts`.
 - Web Worker processing under `src/lib/workers`.
@@ -201,7 +201,7 @@ type CoordinateSystem = {
 };
 ```
 
-`CanvasImage` currently has: `id, name, src, x, y, width, height, opacity, locked`. A `rotation: number` field (degrees) is planned.
+`CanvasImage` currently has: `id, name, src, x, y, width, height, rotation, opacity, locked`.
 
 ## Dependency Policy
 

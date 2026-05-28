@@ -42,15 +42,14 @@
 	type PaperLayer = paper.Layer;
 	type PaperMouseEvent = paper.ToolEvent;
 	type PaperSize = paper.Size;
-	type PaperRectangle = paper.Rectangle;
 	type ImageResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 	type ImageHandle = 'move' | 'rotate' | ImageResizeHandle;
 	type ImageTransformSnapshot = Pick<CanvasImage, 'x' | 'y' | 'width' | 'height' | 'rotation'>;
 
 	let paper: PaperScope | null = null;
-	let canvas: HTMLCanvasElement;
-	let canvasHost: HTMLElement;
-	let rightPanelHost: HTMLElement;
+	let canvas = $state<HTMLCanvasElement>();
+	let canvasHost = $state<HTMLElement>();
+	let rightPanelHost = $state<HTMLElement>();
 	let tool: PaperTool | null = null;
 	let project: PaperProject | null = null;
 	let activePath: PaperPath | null = null;
@@ -94,9 +93,7 @@
 	let undoHistory = $state<EditorSnapshot[]>([]);
 	let redoHistory = $state<EditorSnapshot[]>([]);
 	let coordinateSystem = $state<CoordinateSystem>({
-		...defaultCoordinateSystem,
-		originCanvas: { x: 360, y: 300 },
-		xAxisPoint: { x: 460, y: 300 }
+		...defaultCoordinateSystem
 	});
 	let unitRealLength = $state(1);
 	let precision = $state(3);
@@ -115,6 +112,8 @@
 	let rightPanelCollapsed = $state(false);
 	let rightCurvesPanelHeight = $state(220);
 	let resizingPanel = $state<'left' | 'right' | null>(null);
+	let panelResizeStartX = 0;
+	let panelResizeStartWidth = 0;
 	let resizingRightSection = $state(false);
 	let rightSectionResizeStartY = 0;
 	let rightSectionStartHeight = 0;
@@ -124,6 +123,8 @@
 	let hoverCanvasCursor = $state<string | null>(null);
 
 	let rightSettingsPanelHeight = $state(210);
+	const leftPanelMinWidth = 296;
+	const leftPanelMaxWidth = 460;
 
 	let selectedCurveIdSet = $derived(new Set(selectedCurveIds));
 	let selectedCurves = $derived(curves.filter((curve) => selectedCurveIdSet.has(curve.id)));
@@ -152,6 +153,10 @@
 
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+	function clampLeftPanelWidth(value: number) {
+		return clamp(value, leftPanelMinWidth, leftPanelMaxWidth);
+	}
+
 	function persistPanelLayout() {
 		if (!browser) return;
 		localStorage.setItem(
@@ -179,7 +184,7 @@
 				leftCollapsed?: boolean;
 				rightCollapsed?: boolean;
 			};
-			leftPanelWidth = clamp(parsed.left ?? leftPanelWidth, 220, 460);
+			leftPanelWidth = clampLeftPanelWidth(parsed.left ?? leftPanelWidth);
 			rightPanelWidth = clamp(parsed.right ?? rightPanelWidth, 300, 620);
 			leftPanelCollapsed = parsed.leftCollapsed ?? leftPanelCollapsed;
 			rightPanelCollapsed = parsed.rightCollapsed ?? rightPanelCollapsed;
@@ -260,7 +265,7 @@
 	}
 
 	function initializeCoordinateSystemFromCanvas(size: { width: number; height: number }) {
-		if (hasInitializedCoordinateSystem) return;
+		if (hasInitializedCoordinateSystem) return false;
 		const centerX = size.width / 2;
 		const centerY = size.height / 2;
 		const unitCanvasLength = defaultCoordinateSystem.unitCanvasLength;
@@ -272,13 +277,14 @@
 			unitCanvasLength
 		};
 		hasInitializedCoordinateSystem = true;
+		return true;
 	}
 
 	function syncCanvasSize() {
 		if (!canvas) return;
 		const size = measureCanvasHost();
 		if (!size) return;
-		initializeCoordinateSystemFromCanvas(size);
+		const initializedNow = initializeCoordinateSystemFromCanvas(size);
 
 		const previousCenter = paper?.view.center;
 		const changed = canvas.width !== size.width || canvas.height !== size.height;
@@ -289,7 +295,12 @@
 
 		if (paper) {
 			paper.view.viewSize = new paper.Size(size.width, size.height) as PaperSize;
-			if (previousCenter) {
+			if (initializedNow) {
+				paper.view.center = new paper.Point(
+					coordinateSystem.originCanvas.x,
+					coordinateSystem.originCanvas.y
+				);
+			} else if (previousCenter) {
 				paper.view.center = previousCenter;
 			}
 			paper.view.update();
@@ -1154,6 +1165,8 @@
 			return;
 		}
 		resizingPanel = panel;
+		panelResizeStartX = event.clientX;
+		panelResizeStartWidth = panel === 'left' ? leftPanelWidth : rightPanelWidth;
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 		document.body.style.cursor = 'col-resize';
 		document.body.style.userSelect = 'none';
@@ -1165,9 +1178,15 @@
 	function handlePanelResize(event: PointerEvent) {
 		if (!resizingPanel) return;
 		if (resizingPanel === 'left') {
-			leftPanelWidth = clamp(event.clientX, 220, 460);
+			leftPanelWidth = clampLeftPanelWidth(
+				panelResizeStartWidth + (event.clientX - panelResizeStartX)
+			);
 		} else {
-			rightPanelWidth = clamp(window.innerWidth - event.clientX, 300, 620);
+			rightPanelWidth = clamp(
+				panelResizeStartWidth - (event.clientX - panelResizeStartX),
+				300,
+				620
+			);
 		}
 		scheduleCanvasResize();
 	}
@@ -1175,6 +1194,8 @@
 	function stopPanelResize() {
 		if (!resizingPanel) return;
 		resizingPanel = null;
+		panelResizeStartX = 0;
+		panelResizeStartWidth = 0;
 		document.body.style.cursor = '';
 		document.body.style.userSelect = '';
 		window.removeEventListener('pointermove', handlePanelResize);
@@ -2094,17 +2115,16 @@
 		loadPanelLayout();
 		loadRightPanelLayout();
 		loadBrushSettings();
-		syncCanvasSize();
 		window.addEventListener('keydown', handleShortcutKeydown);
 		const paperModule = (await import('paper')).default;
 		paper = paperModule;
-		paperModule.setup(canvas);
+		paperModule.setup(canvas!);
 		syncCanvasSize();
 		project = paperModule.project;
 		tool = new paperModule.Tool();
 		canvasResizeObserver = new ResizeObserver(scheduleCanvasResize);
-		canvasResizeObserver.observe(canvasHost);
-		canvasResizeObserver.observe(rightPanelHost);
+		canvasResizeObserver.observe(canvasHost!);
+		canvasResizeObserver.observe(rightPanelHost!);
 
 		tool.onMouseDown = (event: PaperMouseEvent) => {
 			if (!paper) return;

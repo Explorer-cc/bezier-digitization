@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { CanvasImage, CurvePath } from '$lib/core/types';
 	import { Lock, Unlock } from '@lucide/svelte';
+	let imageActionRow = $state<HTMLDivElement | null>(null);
 
 	let {
 		selectedImage,
@@ -46,6 +47,7 @@
 			? firstWidth
 			: selectedCurves[0].strokeWidth;
 	});
+
 </script>
 
 <section class="mt-6 space-y-3">
@@ -69,9 +71,9 @@
 					onchange={onCommitImageOpacityEdit}
 				/>
 			</label>
-			<div class="mt-3 flex flex-wrap gap-2">
+			<div bind:this={imageActionRow} class="mt-3 flex flex-nowrap gap-2">
 				<button
-					class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
+					class="inline-flex h-8 shrink-0 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
 					onclick={onToggleImageLock}
 					type="button"
 				>
@@ -79,14 +81,14 @@
 					{selectedImage.locked ? '已锁定' : '未锁定'}
 				</button>
 				<button
-					class="inline-flex h-8 items-center rounded border border-zinc-300 px-2 text-xs"
+					class="inline-flex h-8 shrink-0 items-center rounded border border-zinc-300 px-2 text-xs"
 					onclick={onFitImageToCanvas}
 					type="button"
 				>
 					适配画布
 				</button>
 				<button
-					class="inline-flex h-8 items-center rounded border border-zinc-300 px-2 text-xs"
+					class="inline-flex h-8 shrink-0 items-center rounded border border-zinc-300 px-2 text-xs"
 					onclick={onResetImageTransform}
 					type="button"
 				>
