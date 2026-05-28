@@ -139,7 +139,7 @@
 				线宽 {selectedCurveCommonStrokeWidth}px{selectedCurveCount > 1 ? '（批量）' : ''}
 				<input
 					class="mt-1 w-full"
-					max="8"
+					max="20"
 					min="1"
 					step="1"
 					type="range"

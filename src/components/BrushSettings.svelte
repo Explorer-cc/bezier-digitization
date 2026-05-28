@@ -26,7 +26,7 @@
 	</label>
 	<label class="block text-xs text-zinc-600">
 		线宽 {strokeWidth}px
-		<input bind:value={strokeWidth} class="mt-1 w-full" max="8" min="1" type="range" />
+		<input bind:value={strokeWidth} class="mt-1 w-full" max="20" min="1" type="range" />
 	</label>
 	<label class="block text-xs text-zinc-600">
 		简化容差 {simplifyTolerance}

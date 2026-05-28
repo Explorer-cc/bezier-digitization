@@ -184,7 +184,7 @@ Still remaining for this goal:
   - export-settings block height adapts to smaller viewport heights
   - code-output block fills remaining space
 - [x] Left panel default width reduced.
-- [x] Brush width slider narrowed to `1px` to `8px`.
+- [x] Brush width slider range adjusted to `1px` to `20px`.
 - [x] Reset view now centers the calibrated origin in the viewport.
 - [x] Reset-view button moved away from the bottom edge to reduce small-window clipping risk.
 - [x] Small-viewport constraints tightened:
