@@ -70,6 +70,8 @@
 	let exportFormat = $state<ExportFormat>('tikz');
 	let stroke = $state('#111827');
 	let strokeWidth = $state(2);
+	let simplifyTolerance = $state(2);
+	let smoothDrawnPath = $state(true);
 	let snapClosedPaths = $state(false);
 	let closedPathSnapDistance = $state(18);
 	let showGrid = $state(true);
@@ -94,7 +96,7 @@
 		{ id: 'luadraw', label: 'LuaDraw' },
 		{ id: 'cetz', label: 'CeTZ' }
 	];
-	const rightSettingsPanelHeight = 210;
+	let rightSettingsPanelHeight = $state(210);
 
 	let selectedCurveIdSet = $derived(new Set(selectedCurveIds));
 	let selectedCurves = $derived(curves.filter((curve) => selectedCurveIdSet.has(curve.id)));
@@ -183,6 +185,34 @@
 		}
 	}
 
+	function persistBrushSettings() {
+		if (!browser) return;
+		localStorage.setItem(
+			'tikz-curve-digitizer:brush-settings',
+			JSON.stringify({
+				simplifyTolerance,
+				smoothDrawnPath
+			})
+		);
+	}
+
+	function loadBrushSettings() {
+		if (!browser) return;
+		const raw = localStorage.getItem('tikz-curve-digitizer:brush-settings');
+		if (!raw) return;
+
+		try {
+			const parsed = JSON.parse(raw) as {
+				simplifyTolerance?: number;
+				smoothDrawnPath?: boolean;
+			};
+			simplifyTolerance = clamp(parsed.simplifyTolerance ?? simplifyTolerance, 0, 5);
+			smoothDrawnPath = parsed.smoothDrawnPath ?? smoothDrawnPath;
+		} catch {
+			localStorage.removeItem('tikz-curve-digitizer:brush-settings');
+		}
+	}
+
 	function measureCanvasHost() {
 		if (!canvasHost) return null;
 		const rect = canvasHost.getBoundingClientRect();
@@ -225,8 +255,29 @@
 				paper.view.center = previousCenter;
 			}
 			paper.view.update();
+			fitRightPanelLayoutToAvailableHeight();
 			drawCalibration();
 		}
+	}
+
+	function fitRightPanelLayoutToAvailableHeight() {
+		if (!rightPanelHost) return;
+		const availableHeight = rightPanelHost.getBoundingClientRect().height;
+		const minCurvesHeight = 80;
+		const minSettingsHeight = 120;
+		const minOutputHeight = 120;
+		const separatorHeight = 16;
+		const preferredSettingsHeight = 210;
+		const maxSettingsHeight = Math.max(
+			minSettingsHeight,
+			availableHeight - minCurvesHeight - minOutputHeight - separatorHeight
+		);
+		rightSettingsPanelHeight = clamp(preferredSettingsHeight, minSettingsHeight, maxSettingsHeight);
+		const maxCurvesHeight = Math.max(
+			minCurvesHeight,
+			availableHeight - rightSettingsPanelHeight - minOutputHeight - separatorHeight
+		);
+		rightCurvesPanelHeight = clamp(rightCurvesPanelHeight, minCurvesHeight, maxCurvesHeight);
 	}
 
 	function scheduleCanvasResize() {
@@ -234,6 +285,10 @@
 		cancelAnimationFrame(canvasResizeFrame);
 		canvasResizeFrame = requestAnimationFrame(syncCanvasSize);
 	}
+
+	$effect(() => {
+		persistBrushSettings();
+	});
 
 	function toPlainPoint(point: PaperPoint): Point {
 		return { x: point.x, y: point.y };
@@ -428,8 +483,8 @@
 	function handleRightSectionResize(event: PointerEvent) {
 		if (!resizingRightSection || !rightPanelHost) return;
 		const availableHeight = rightPanelHost.getBoundingClientRect().height;
-		const minCurvesHeight = 120;
-		const minOutputHeight = 180;
+		const minCurvesHeight = 80;
+		const minOutputHeight = 120;
 		const separatorHeight = 16;
 		const maxCurvesHeight = Math.max(
 			minCurvesHeight,
@@ -486,8 +541,12 @@
 	}
 
 	function addCurveFromPath(path: PaperPath) {
-		path.simplify(2);
-		path.smooth({ type: 'continuous' });
+		if (simplifyTolerance > 0) {
+			path.simplify(simplifyTolerance);
+		}
+		if (smoothDrawnPath) {
+			path.smooth({ type: 'continuous' });
+		}
 		const closed = closePathIfSnapped(path);
 		const segments = segmentsFromPath(path);
 		if (segments.length === 0) {
@@ -837,6 +896,7 @@
 	onMount(async () => {
 		loadPanelLayout();
 		loadRightPanelLayout();
+		loadBrushSettings();
 		syncCanvasSize();
 		window.addEventListener('keydown', handleShortcutKeydown);
 		const paperModule = (await import('paper')).default;
@@ -847,6 +907,7 @@
 		tool = new paperModule.Tool();
 		canvasResizeObserver = new ResizeObserver(scheduleCanvasResize);
 		canvasResizeObserver.observe(canvasHost);
+		canvasResizeObserver.observe(rightPanelHost);
 
 		tool.onMouseDown = (event: PaperMouseEvent) => {
 			if (!paper) return;
@@ -943,7 +1004,7 @@
 	<title>Bezier Curve Digitizer</title>
 </svelte:head>
 
-<main class="h-screen overflow-hidden bg-zinc-100 text-zinc-950">
+<main class="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-950">
 	<header class="flex h-14 items-center justify-between border-b border-zinc-300 bg-white px-4 shrink-0">
 		<div>
 			<h1 class="text-base font-semibold">Bezier Curve Digitizer</h1>
@@ -976,9 +1037,9 @@
 		</div>
 	</header>
 
-	<div class="grid h-[calc(100vh-3.5rem)] min-h-0" style:grid-template-columns={workspaceGridColumns}>
+	<div class="grid min-h-0 flex-1" style:grid-template-columns={workspaceGridColumns}>
 		<aside
-			class={`overflow-y-auto border-r border-zinc-300 bg-white p-4 ${
+			class={`min-h-0 overflow-y-auto border-r border-zinc-300 bg-white p-4 ${
 				leftPanelCollapsed ? 'pointer-events-none invisible' : ''
 			}`}
 		>
@@ -1034,6 +1095,21 @@
 				<label class="block text-xs text-zinc-600">
 					线宽 {strokeWidth}px
 					<input bind:value={strokeWidth} class="mt-1 w-full" max="8" min="1" type="range" />
+				</label>
+				<label class="block text-xs text-zinc-600">
+					简化容差 {simplifyTolerance}
+					<input
+						bind:value={simplifyTolerance}
+						class="mt-1 w-full"
+						max="5"
+						min="0"
+						step="0.5"
+						type="range"
+					/>
+				</label>
+				<label class="flex items-center gap-2 text-sm">
+					<input bind:checked={smoothDrawnPath} type="checkbox" />
+					平滑路径
 				</label>
 				<label class="flex items-center gap-2 text-sm">
 					<input bind:checked={snapClosedPaths} type="checkbox" />
@@ -1129,12 +1205,19 @@
 			onpointerdown={(event) => startPanelResize('left', event)}
 		></div>
 
-		<section bind:this={canvasHost} class="relative min-w-0 bg-zinc-200">
+		<section bind:this={canvasHost} class="relative min-h-0 min-w-0 overflow-hidden bg-zinc-200">
 			<div
 				class="absolute top-3 left-3 z-10 rounded border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-600 shadow-sm"
 			>
 				{status}
 			</div>
+			<button
+				class="absolute top-3 right-3 z-10 inline-flex h-8 items-center rounded border border-zinc-300 bg-white px-2 text-xs shadow-sm"
+				onclick={resetView}
+				type="button"
+			>
+				重置视图
+			</button>
 			<canvas
 				bind:this={canvas}
 				class={`h-full w-full bg-white ${canvasCursorClass}`}
@@ -1147,13 +1230,6 @@
 					初始化画布...
 				</div>
 			{/if}
-			<button
-				class="absolute bottom-3 left-3 rounded border border-zinc-300 bg-white px-3 py-2 text-xs shadow-sm"
-				onclick={resetView}
-				type="button"
-			>
-				重置视图
-			</button>
 		</section>
 
 		<div
