@@ -4,7 +4,7 @@
 
 The first working web version is implemented. The app is a SvelteKit-based browser tool for uploading a reference image, drawing Bezier-like curves on a Paper.js canvas, calibrating a coordinate system, and exporting path code.
 
-The current implementation is intentionally compact: the MVP UI is concentrated in `src/routes/+page.svelte`, while reusable math and export logic lives in `src/lib/core`.
+The current implementation is intentionally compact: the MVP UI has been extracted into eight Svelte components under `src/components/`, while reusable math and export logic lives in `src/lib/core`. `+page.svelte` owns the Paper.js canvas lifecycle and orchestrates the components.
 
 ## Current Goal Status
 
@@ -26,11 +26,11 @@ Already implemented toward that goal:
 - [x] Single selected curves support direct anchor and Bezier-handle editing on canvas.
 - [x] Multiple selected curves support batch stroke color and width editing.
 - [x] Undo/redo now spans curve creation, curve editing, image editing, and calibration changes.
-- [x] Component extraction has started with `src/components/ObjectPropertiesPanel.svelte`.
+- [x] Component extraction completed with eight UI components under `src/components/`:
+  - Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
 
 Still remaining for this goal:
 
-- [ ] Extract more of the monolithic workspace UI into components, especially the curve list, export panel, toolbar, and canvas workspace shell.
 - [ ] Improve multi-curve edit affordances beyond basic multi-select and batch styling.
 - [ ] Decide whether curves and images need a shared higher-level object store instead of local page state only.
 - [ ] Add project save/load so image state, curve data, and calibration can round-trip together.
@@ -174,6 +174,7 @@ Still remaining for this goal:
 - [x] Multiple selected curves support batch color and stroke-width editing from the object-properties panel.
 - [x] Pan-mode hit-testing order clarified so selected-image transforms do not block ordinary curve selection.
 - [x] First UI extraction completed with `src/components/ObjectPropertiesPanel.svelte`.
+- [x] Full UI component extraction completed: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, CurveListPanel, ExportPanel.
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
 
 ## Verification Status
@@ -187,8 +188,7 @@ Still remaining for this goal:
 
 ## Known MVP Limitations
 
-- [ ] The UI is still concentrated in `src/routes/+page.svelte`; it should be split into components before the interface grows much more.
-- [ ] Component extraction has started, but most of the workspace and panel UI still lives in `src/routes/+page.svelte`.
+- [ ] All application state and Paper.js canvas logic still lives in `src/routes/+page.svelte`; it should be moved into shared stores (`src/stores.ts`) for better separation of concerns.
 - [ ] Curve click-to-select, additive canvas selection, and basic batch style editing are implemented, but richer multi-select edit affordances still need work.
 - [ ] There is no layer model yet.
 - [ ] There is no project save/load format yet.
@@ -210,13 +210,16 @@ Still remaining for this goal:
   - persist widths in `localStorage`
 - [x] Add side panel collapse and expand buttons on the resize handles.
 - [x] Persist collapsed side panel state in `localStorage`.
-- [ ] Create `src/components/Toolbar.svelte`.
-- [ ] Create `src/components/CanvasWorkspace.svelte`.
-- [ ] Create `src/components/SettingsPanel.svelte`.
-- [ ] Create `src/components/ExportPanel.svelte`.
-- [ ] Create `src/components/CurveList.svelte`.
-- [ ] Keep Paper.js canvas lifecycle inside `CanvasWorkspace.svelte`.
-- [ ] Keep components focused on UI; move business logic into `src/lib/core` or stores.
+- [x] Create `src/components/Header.svelte`.
+- [x] Create `src/components/Toolbar.svelte`.
+- [x] Create `src/components/BrushSettings.svelte`.
+- [x] Create `src/components/CalibrationSettings.svelte`.
+- [x] Create `src/components/CanvasWorkspace.svelte`.
+- [x] Create `src/components/CurveListPanel.svelte`.
+- [x] Create `src/components/ExportPanel.svelte`.
+- [x] Keep components focused on UI; business logic stays in `+page.svelte` and `src/lib/core`.
+- [ ] Move Paper.js canvas lifecycle inside `CanvasWorkspace.svelte` (deferred; currently `+page.svelte` still owns the canvas setup and tool events).
+- [ ] Create `src/stores.ts` and move shared state out of `+page.svelte`.
 
 ### 2. Improve State Management
 
@@ -228,12 +231,12 @@ Still remaining for this goal:
   - coordinate system
   - reference image settings
   - export settings
-- [ ] Add local persistence for lightweight user preferences:
-  - export precision
+- [x] Add local persistence for lightweight user preferences:
   - brush color
   - brush width
   - simplify tolerance
   - smoothing toggle
+  - snap settings
 
 ### 3. Improve Reference Image Handling
 

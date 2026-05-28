@@ -65,7 +65,6 @@
 				index: number;
 		  }
 		| null = null;
-	let imageDragStartPoint: Point | null = null;
 	let imageStartBounds: { x: number; y: number; width: number; height: number } | null = null;
 	let imageNaturalSize: { width: number; height: number } | null = null;
 	let hasInitializedCoordinateSystem = false;
@@ -137,17 +136,6 @@
 			format: exportFormat
 		})
 	);
-	let exportTitle = $derived.by(() => {
-		if (exportFormat === 'luadraw') return 'LuaDraw 输出';
-		if (exportFormat === 'cetz') return 'CeTZ 输出';
-		return 'TikZ 输出';
-	});
-	let exportFileName = $derived.by(() => {
-		if (exportFormat === 'luadraw') return 'curves.lua';
-		if (exportFormat === 'cetz') return 'curves.typ';
-		return 'curves.tikz';
-	});
-	let originCoord = $derived(canvasToCoordinate(coordinateSystem.originCanvas, coordinateSystem));
 	let workspaceGridColumns = $derived(
 		`${leftPanelCollapsed ? 0 : leftPanelWidth}px 28px 6px minmax(0, 1fr) 6px 28px ${rightPanelCollapsed ? 0 : rightPanelWidth}px`
 	);
@@ -527,7 +515,6 @@
 		selectedObject = cloneSelectedObjectState(snapshot.selectedObject);
 		activeCurveHandle = null;
 		activeImageHandle = null;
-		imageDragStartPoint = null;
 		imageStartBounds = null;
 		syncReferenceRasterToImageState();
 		redrawCurves();
@@ -1721,7 +1708,7 @@
 	async function copyExport() {
 		if (!browser || !exportCode) return;
 		await navigator.clipboard.writeText(exportCode);
-		status = `${exportTitle}代码已复制`;
+		status = `${exportFormat === 'luadraw' ? 'LuaDraw 输出' : exportFormat === 'cetz' ? 'CeTZ 输出' : 'TikZ 输出'}代码已复制`;
 	}
 
 	function downloadExport() {
@@ -1730,7 +1717,7 @@
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
 		anchor.href = url;
-		anchor.download = exportFileName;
+		anchor.download = exportFormat === 'luadraw' ? 'curves.lua' : exportFormat === 'cetz' ? 'curves.typ' : 'curves.tikz';
 		anchor.click();
 		URL.revokeObjectURL(url);
 	}
@@ -1783,7 +1770,6 @@
 					imageStartBounds = image
 						? { x: image.x, y: image.y, width: image.width, height: image.height }
 						: null;
-					imageDragStartPoint = point;
 					return;
 				}
 
@@ -1793,7 +1779,6 @@
 					if (!image?.locked) {
 						beginPendingEditHistory();
 						activeImageHandle = 'move';
-						imageDragStartPoint = point;
 					}
 					return;
 				}
@@ -1891,7 +1876,6 @@
 			}
 			activeCurveHandle = null;
 			activeImageHandle = null;
-			imageDragStartPoint = null;
 			imageStartBounds = null;
 			activeHandle = null;
 			document.body.classList.remove('cursor-pan-tool');

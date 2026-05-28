@@ -19,10 +19,17 @@ The immediate product direction is browser-first. Do not add Electron, Tauri, or
 ```text
 src/
   components/
+    BrushSettings.svelte        # Brush color, width, simplify, smoothing, and snap controls.
+    CalibrationSettings.svelte  # Unit length input and grid display toggle.
+    CanvasWorkspace.svelte      # Canvas element with status overlay and reset-view button.
+    CurveListPanel.svelte       # Curve list with multi-selection, delete, and clear actions.
+    ExportPanel.svelte          # Export format selector, precision, code output, and download.
+    Header.svelte               # App title, image upload button, and copy-export button.
     ObjectPropertiesPanel.svelte # Shared object-properties UI for image and curve objects.
+    Toolbar.svelte              # Tool mode buttons and undo/redo controls.
   routes/
     +layout.svelte       # Imports global CSS and favicon.
-    +page.svelte         # Current main application UI and Paper.js canvas workflow.
+    +page.svelte         # Paper.js canvas lifecycle, state management, and component orchestration.
     layout.css           # Tailwind CSS import.
 
   lib/
@@ -43,32 +50,18 @@ Generated or environment-specific folders such as `.svelte-kit`, `.vercel`, `.pn
 
 ## Current Implementation Notes
 
-The main screen is currently implemented in `src/routes/+page.svelte`. It includes:
+The main screen is orchestrated by `src/routes/+page.svelte`, which owns the Paper.js canvas lifecycle and all application state. The UI has been extracted into eight Svelte components under `src/components/`:
 
-- Image upload through a hidden file input and a dedicated top-layer Paper.js `Raster`.
-- A Paper.js canvas with zoom via mouse wheel and pan mode.
-- Freehand brush drawing with explicit simplify-tolerance and smoothing controls.
-- Conversion of drawn paths into internal cubic Bezier segment data.
-- Curve list with multi-selection, selection highlighting, delete, clear, and batch style-edit actions.
-- Undo and redo for curve creation/deletion, curve edits, image edits, and calibration changes, including keyboard shortcuts.
-- Keyboard object-editing shortcuts for cancel-selection and delete-selected-curve actions.
-- Coordinate origin handle and horizontally constrained unit-length handle.
-- Fixed horizontal x-axis and vertical y-axis calibration behavior.
-- Grid rendering based on calibrated unit length.
-- Code export preview, copy, and download.
-- Export precision and export-format switching for TikZ, LuaDraw, and CeTZ.
-- Closed-path snapping toggle and configurable snap threshold.
-- Pale-green closed-path snap preview circle during active brush drawing.
-- Grid-point snapping that shares the same snap radius as closed-path snapping.
-- Snap-hit coordinate feedback in the canvas status bar while grid snapping is active.
-- Brush post-processing and snap settings persisted in `localStorage`.
-- A lightweight Paper.js object-selection layer for images and curves.
-- Canvas hit-testing for both reference images and curve paths in pan mode, with explicit priority between curve handles, image handles, curves, and image bodies.
-- On-canvas anchor and Bezier-handle editing for a single selected curve in pan mode.
-- Selected-object properties in the left panel instead of a static reference-image section.
-- Initial component extraction started with a dedicated object-properties panel.
-- Resizable and collapsible left/right panels persisted in `localStorage`.
-- Adaptive right-side vertical layout with draggable separators and height clamping for smaller viewports.
+- `Header.svelte` — app title bar, image upload, and copy-export button.
+- `Toolbar.svelte` — brush/pan tool switching and undo/redo buttons.
+- `BrushSettings.svelte` — brush color, width, simplify tolerance, smoothing, and all snap controls (uses `$bindable` for two-way state binding).
+- `CalibrationSettings.svelte` — real unit length input and grid display toggle.
+- `CanvasWorkspace.svelte` — canvas element with status overlay and reset-view button (exposes `canvas` and `hostElement` refs via `$bindable`).
+- `ObjectPropertiesPanel.svelte` — shared property editor for selected images and curves.
+- `CurveListPanel.svelte` — curve list with multi-selection, delete, clear, and select-all actions.
+- `ExportPanel.svelte` — export format selector, precision, code output textarea, and download button.
+
+All components receive state via props and communicate back through callback props or `$bindable` two-way bindings. Business logic (coordinate conversion, export formatting) remains in `src/lib/core`.
 
 ## Current Goal Progress
 
@@ -81,16 +74,14 @@ Already implemented for that goal:
 - A single selected curve exposes editable anchors and Bezier control handles directly on canvas.
 - Multiple selected curves support batch color and stroke-width editing.
 - Undo/redo now covers object edits and calibration changes, not just brush-created curve insertion.
-- Initial component extraction has started with `src/components/ObjectPropertiesPanel.svelte`.
+- UI has been extracted into eight components: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
 
 Still remaining for that goal:
 
-- More component extraction, especially the curve list, toolbar, export panel, and canvas workspace shell.
 - Richer multi-curve editing affordances beyond batch styling and single-curve handle editing.
 - Project save/load for image, curves, and calibration state.
 - A more deliberate responsive pass once the object model settles.
-
-The current UI is functional but still monolithic. When adding substantial features, prefer extracting UI-only pieces into `src/components` and keeping business logic in `src/lib/core`.
+- Shared stores in `src/stores.ts` to further reduce `+page.svelte` responsibility.
 
 ## Product Requirement
 
@@ -136,7 +127,6 @@ Already present in some form:
 
 Still incomplete or not yet implemented:
 
-- Broader component structure under `src/components`; only the object-properties panel has been extracted so far.
 - Shared stores in `src/stores.ts`.
 - Web Worker processing under `src/lib/workers`.
 - API routes under `src/routes/api`.
