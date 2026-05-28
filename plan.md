@@ -2,7 +2,7 @@
 
 ## Current Status
 
-The first working web version is implemented. The app is a SvelteKit-based browser tool for uploading a reference image, drawing Bezier-like curves on a Paper.js canvas, calibrating a coordinate system, and exporting TikZ code.
+The first working web version is implemented. The app is a SvelteKit-based browser tool for uploading a reference image, drawing Bezier-like curves on a Paper.js canvas, calibrating a coordinate system, and exporting path code.
 
 The current implementation is intentionally compact: the MVP UI is concentrated in `src/routes/+page.svelte`, while reusable math and export logic lives in `src/lib/core`.
 
@@ -30,13 +30,14 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
   - distance calculation
   - unit length calibration helper
   - optional y-axis inversion
-- [x] TikZ export implemented in `src/lib/core/exporter.ts`:
-  - single curve export
-  - multiple curve export
-  - optional `tikzpicture` wrapper
+- [x] Export logic implemented in `src/lib/core/exporter.ts`:
+  - TikZ path export
+  - LuaDraw `g:Dbezier(...)` export
+  - CeTZ `bezier(...)` export
   - decimal precision setting
-  - cubic Bezier `.. controls .. and ..` output
+  - cubic Bezier control-point formatting
   - basic stroke color and line width mapping
+  - closed-path export handling
 - [x] Tests added:
   - coordinate conversion tests
   - TikZ exporter tests
@@ -53,10 +54,16 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Cubic Bezier segment data extracted from Paper.js paths.
 - [x] Extracted curves stored as internal `CurvePath` objects.
 - [x] Curve list implemented.
-- [x] Curve selection implemented through the right-side curve list.
+- [x] Multi-selection implemented through the right-side curve list.
+- [x] Select-all and clear-selection actions implemented.
 - [x] Removed the inactive canvas `select` tool from the toolbar.
 - [x] Selected curve delete implemented.
 - [x] Clear all curves implemented.
+- [x] Undo last drawn curve implemented.
+- [x] Redo / restore last undone curve implemented.
+- [x] Keyboard shortcuts added:
+  - `Ctrl+Z` / `Cmd+Z`
+  - `Ctrl+Y` / `Cmd+Y`
 - [x] Origin setting mode implemented.
 - [x] Unit length calibration mode implemented.
 - [x] Unit length can be adjusted by dragging the visible coordinate-axis unit point.
@@ -74,26 +81,47 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Calibrated coordinate grid implemented.
 - [x] Coordinate grid display toggle implemented.
 - [x] Removed user-facing y-axis inversion option; TikZ export uses y-axis-up coordinates by default.
-- [x] TikZ export panel implemented.
-- [x] Copy TikZ to clipboard implemented.
-- [x] Download `.tikz` implemented.
+- [x] Code export panel implemented.
+- [x] Copy export code to clipboard implemented.
+- [x] Download export code implemented with format-specific filename.
 - [x] Export precision setting implemented.
-- [x] Optional `tikzpicture` wrapper setting implemented.
+- [x] Export format selection implemented:
+  - TikZ
+  - LuaDraw
+  - CeTZ
+- [x] Export output title unified as `代码输出`.
+- [x] Removed wrapper generation for `tikzpicture` and `#cetz.canvas(...)`.
+- [x] TikZ output formatting refined:
+  - `\draw[...]` on its own line
+  - start point on its own line
+  - each `.. controls ..` segment on its own line
+- [x] Negative-zero formatting fixed for rounded export numbers.
+- [x] Closed-path snapping toggle added for brush drawing.
+- [x] Closed-path snapping threshold slider added in the left panel.
+- [x] Closed-path snapping now closes by endpoint snap only and does not resmooth the whole path.
+- [x] Closed curves are exported distinctly in all formats.
+- [x] Right-side vertical layout improved:
+  - top and bottom drag handles move the fixed-height export-settings block
+  - export-settings block height is fixed
+  - code-output block fills remaining space
+- [x] Left panel default width reduced.
+- [x] Brush width slider narrowed to `1px` to `8px`.
+- [x] Reset view now centers the calibrated origin in the viewport.
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
 
 ## Verification Status
 
 - [x] `pnpm install --store-dir .pnpm-store` works.
 - [x] `pnpm check` passes.
-- [x] `pnpm test` passes.
-- [x] `pnpm build` passes.
-- [x] `pnpm lint` passes.
-- [x] Local dev server responds at `http://localhost:5173/`.
+- [ ] `pnpm test` is currently blocked in the sandbox because Vite/Vitest cannot write `node_modules/.vite-temp`.
+- [ ] `pnpm build` is currently blocked in the sandbox for the same `.vite-temp` permission reason.
+- [ ] `pnpm lint` has not been rerun after the latest UI/export changes.
+- [x] Local dev server has responded successfully when run outside the sandbox restriction.
 
 ## Known MVP Limitations
 
 - [ ] The UI is still concentrated in `src/routes/+page.svelte`; it should be split into components before the interface grows much more.
-- [ ] Curve editing is limited to selection, deletion, and export.
+- [ ] Curve editing is limited to selection, deletion, undo/redo, and export.
 - [ ] Canvas click-to-select is not implemented yet; use the curve list for selection.
 - [ ] Anchor points and Bezier handles are not editable yet.
 - [ ] The reference image lock/unlock control is present, but image transform editing is not yet fully implemented.
@@ -101,6 +129,8 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] There is no project save/load format yet.
 - [ ] i18n files are not wired into the UI yet.
 - [ ] Manual LaTeX/TikZ compile verification still needs to be done with exported output.
+- [ ] Closed-path snapping uses a simple endpoint-distance heuristic only.
+- [ ] Closed-path snapping currently has no pre-trigger preview on the canvas.
 
 ## Next TodoList
 
@@ -154,7 +184,14 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Let users drag anchors and control handles.
 - [ ] Add curve rename.
 - [ ] Add curve color and stroke width editing after creation.
-- [ ] Add undo/redo for drawing and deletion.
+- [x] Add undo/redo for drawing.
+- [ ] Broaden undo/redo to cover deletion, clear, calibration, and image changes.
+- [ ] Add closed-path snap preview when the brush endpoint is within the configured snap threshold.
+  - show a pale-green circle centered on the current endpoint
+  - use the left-panel threshold as the preview radius
+  - only show while the brush is active and snapping is enabled
+  - hide immediately when the endpoint exits the threshold
+  - verify that the preview radius tracks zoom consistently
 
 ### 5. Improve Coordinate Calibration
 
@@ -165,10 +202,13 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Add grid overlay based on calibrated coordinates.
 - [ ] Add snapping to origin, axis, and grid.
 
-### 6. Improve TikZ Export
+### 6. Improve Export
 
-- [ ] Allow exporting all curves or only the selected curve through an explicit toggle.
+- [x] Allow exporting selected curves only; when nothing is selected, output is empty.
+- [ ] Add explicit export-mode toggle for selected/all if needed.
 - [ ] Add TikZ style presets.
+- [ ] Add LuaDraw option presets.
+- [ ] Add CeTZ style presets.
 - [ ] Add color conversion options:
   - named colors
   - RGB definitions
@@ -176,6 +216,8 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Add optional comments with curve names.
 - [ ] Add axis/grid export options.
 - [ ] Test exported TikZ in a minimal LaTeX document.
+- [ ] Test exported LuaDraw in a minimal LuaLaTeX document.
+- [ ] Test exported CeTZ in a minimal Typst document.
 
 ### 7. Add i18n Foundation
 

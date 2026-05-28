@@ -22,6 +22,7 @@
 		Image as ImageIcon,
 		Lock,
 		Pencil,
+		Redo2,
 		Trash2,
 		Undo2,
 		Unlock
@@ -55,6 +56,7 @@
 	let activeTool = $state<ToolMode>('brush');
 	let image = $state<CanvasImage | null>(null);
 	let curves = $state<CurvePath[]>([]);
+	let redoCurves = $state<CurvePath[]>([]);
 	let selectedCurveIds = $state<string[]>([]);
 	let coordinateSystem = $state<CoordinateSystem>({
 		...defaultCoordinateSystem,
@@ -67,8 +69,9 @@
 	let stroke = $state('#111827');
 	let strokeWidth = $state(2);
 	let snapClosedPaths = $state(false);
+	let closedPathSnapDistance = $state(18);
 	let showGrid = $state(true);
-	let leftPanelWidth = $state(280);
+	let leftPanelWidth = $state(240);
 	let rightPanelWidth = $state(360);
 	let leftPanelCollapsed = $state(false);
 	let rightPanelCollapsed = $state(false);
@@ -247,12 +250,11 @@
 		const last = path.lastSegment;
 		if (!first || !last) return false;
 
-		const snapDistance = 18 / (paper?.view.zoom ?? 1);
+		const snapDistance = closedPathSnapDistance / (paper?.view.zoom ?? 1);
 		if (first.point.getDistance(last.point) > snapDistance) return false;
 
 		last.point = first.point.clone();
 		path.closed = true;
-		path.smooth({ type: 'continuous' });
 		return true;
 	}
 
@@ -417,6 +419,7 @@
 			closed
 		};
 		curves = [...curves, curve];
+		redoCurves = [];
 		selectedCurveIds = [curve.id];
 		path.remove();
 		redrawCurves();
@@ -429,6 +432,7 @@
 		if (!selectedCurveIds.length) return;
 		const idsToRemove = new Set(selectedCurveIds);
 		curves = curves.filter((curve) => !idsToRemove.has(curve.id));
+		redoCurves = [];
 		selectedCurveIds = curves.at(-1)?.id ? [curves.at(-1)!.id] : [];
 		redrawCurves();
 		status = `已删除 ${idsToRemove.size} 条曲线`;
@@ -436,6 +440,7 @@
 
 	function clearCurves() {
 		curves = [];
+		redoCurves = [];
 		selectedCurveIds = [];
 		redrawCurves();
 		status = '已清空曲线';
@@ -445,12 +450,49 @@
 		if (!curves.length) return;
 		const removedCurve = curves.at(-1);
 		curves = curves.slice(0, -1);
+		if (removedCurve) {
+			redoCurves = [...redoCurves, removedCurve];
+		}
 		selectedCurveIds = selectedCurveIds.filter((id) => id !== removedCurve?.id);
 		if (!selectedCurveIds.length && curves.length) {
 			selectedCurveIds = [curves.at(-1)!.id];
 		}
 		redrawCurves();
 		status = removedCurve ? `已撤销：${removedCurve.name}` : '已撤销上次绘制';
+	}
+
+	function redoLastCurve() {
+		const restoredCurve = redoCurves.at(-1);
+		if (!restoredCurve) return;
+		redoCurves = redoCurves.slice(0, -1);
+		curves = [...curves, restoredCurve];
+		selectedCurveIds = [restoredCurve.id];
+		redrawCurves();
+		status = `已恢复：${restoredCurve.name}`;
+	}
+
+	function handleShortcutKeydown(event: KeyboardEvent) {
+		if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+		const target = event.target;
+		if (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		) {
+			return;
+		}
+
+		const key = event.key.toLowerCase();
+		if (key === 'z' && !event.shiftKey) {
+			event.preventDefault();
+			undoLastCurve();
+			return;
+		}
+		if (key === 'y') {
+			event.preventDefault();
+			redoLastCurve();
+		}
 	}
 
 	function drawCalibration() {
@@ -510,14 +552,14 @@
 		new paper.Path.Line({
 			from: origin.subtract(xDirection.multiply(diagonal)),
 			to: origin.add(xDirection.multiply(diagonal)),
-			strokeColor: '#2563eb',
+			strokeColor: '#111827',
 			strokeWidth: 2 / paper.view.zoom,
 			parent: layer
 		});
 		new paper.Path.Line({
 			from: origin.subtract(yDirection.multiply(diagonal)),
 			to: origin.add(yDirection.multiply(diagonal)),
-			strokeColor: '#dc2626',
+			strokeColor: '#111827',
 			strokeWidth: 2 / paper.view.zoom,
 			parent: layer
 		});
@@ -703,6 +745,7 @@
 		loadPanelLayout();
 		loadRightPanelLayout();
 		syncCanvasSize();
+		window.addEventListener('keydown', handleShortcutKeydown);
 		const paperModule = (await import('paper')).default;
 		paper = paperModule;
 		paperModule.setup(canvas);
@@ -786,6 +829,7 @@
 			window.removeEventListener('pointermove', handleRightSectionResize);
 			window.removeEventListener('pointerup', stopRightSectionResize);
 			window.removeEventListener('pointercancel', stopRightSectionResize);
+			window.removeEventListener('keydown', handleShortcutKeydown);
 		}
 		canvasResizeObserver?.disconnect();
 		tool?.remove();
@@ -794,14 +838,14 @@
 </script>
 
 <svelte:head>
-	<title>TikZ Curve Digitizer</title>
+	<title>Bezier Curve Digitizer</title>
 </svelte:head>
 
 <main class="flex h-screen min-h-[720px] flex-col bg-zinc-100 text-zinc-950">
 	<header class="flex h-14 items-center justify-between border-b border-zinc-300 bg-white px-4">
 		<div>
-			<h1 class="text-base font-semibold">TikZ Curve Digitizer</h1>
-			<p class="text-xs text-zinc-500">图片描线、坐标校准、Bezier 到 TikZ</p>
+			<h1 class="text-base font-semibold">Bezier Curve Digitizer</h1>
+			<p class="text-xs text-zinc-500">图片描线、坐标校准、多格式 Bezier 路径导出</p>
 		</div>
 		<div class="flex items-center gap-2">
 			<input
@@ -825,7 +869,7 @@
 				type="button"
 			>
 				<Copy size={16} />
-				复制 TikZ
+				复制代码
 			</button>
 		</div>
 	</header>
@@ -855,15 +899,28 @@
 						</button>
 					{/each}
 				</div>
-				<button
-					class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
-					disabled={!curves.length}
-					onclick={undoLastCurve}
-					type="button"
-				>
-					<Undo2 size={16} />
-					撤销上次绘制
-				</button>
+				<div class="mt-3 grid grid-cols-2 gap-2">
+					<button
+						class="inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
+						disabled={!curves.length}
+						onclick={undoLastCurve}
+						type="button"
+						title="Ctrl+Z"
+					>
+						<Undo2 size={16} />
+						撤销
+					</button>
+					<button
+						class="inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
+						disabled={!redoCurves.length}
+						onclick={redoLastCurve}
+						type="button"
+						title="Ctrl+Y"
+					>
+						<Redo2 size={16} />
+						恢复上次路径
+					</button>
+				</div>
 			</section>
 
 			<section class="mt-6 space-y-3">
@@ -874,11 +931,23 @@
 				</label>
 				<label class="block text-xs text-zinc-600">
 					线宽 {strokeWidth}px
-					<input bind:value={strokeWidth} class="mt-1 w-full" max="12" min="1" type="range" />
+					<input bind:value={strokeWidth} class="mt-1 w-full" max="8" min="1" type="range" />
 				</label>
 				<label class="flex items-center gap-2 text-sm">
 					<input bind:checked={snapClosedPaths} type="checkbox" />
 					开启闭合路径吸附
+				</label>
+				<label class="block text-xs text-zinc-600">
+					吸附阈值 {closedPathSnapDistance}px
+					<input
+						bind:value={closedPathSnapDistance}
+						class="mt-1 w-full"
+						disabled={!snapClosedPaths}
+						max="60"
+						min="8"
+						step="1"
+						type="range"
+					/>
 				</label>
 			</section>
 

@@ -47,13 +47,16 @@ The main screen is currently implemented in `src/routes/+page.svelte`. It includ
 - A Paper.js canvas with zoom via mouse wheel and pan mode.
 - Freehand brush drawing converted into simplified and smoothed Paper.js paths.
 - Conversion of drawn paths into internal cubic Bezier segment data.
-- Curve list, selected-curve highlighting, delete, and clear actions.
+- Curve list with multi-selection, selection highlighting, delete, and clear actions.
+- Undo and redo for drawn curves, including keyboard shortcuts.
 - Coordinate origin handle and horizontally constrained unit-length handle.
 - Fixed horizontal x-axis and vertical y-axis calibration behavior.
 - Grid rendering based on calibrated unit length.
-- TikZ export preview, copy, and download.
-- Export precision and optional `tikzpicture` wrapper.
+- Code export preview, copy, and download.
+- Export precision and export-format switching for TikZ, LuaDraw, and CeTZ.
+- Closed-path snapping toggle and configurable snap threshold.
 - Resizable and collapsible left/right panels persisted in `localStorage`.
+- Fixed-height export-settings panel with draggable separators above and below it.
 
 The current UI is functional but still monolithic. When adding substantial features, prefer extracting UI-only pieces into `src/components` and keeping business logic in `src/lib/core`.
 
@@ -68,7 +71,7 @@ Build a focused curve digitization tool, not a general design application. The t
 5. Let the user set the coordinate origin.
 6. Let the user set coordinate unit length by horizontally dragging the visible unit-vector point and assigning a real coordinate distance.
 7. Convert canvas coordinates into calibrated mathematical coordinates.
-8. Export selected or all curves using TikZ path syntax.
+8. Export selected curves as path code.
 
 Keep the x-axis horizontal and the y-axis vertical for the first version.
 
@@ -85,8 +88,12 @@ Already present in some form:
 - Coordinate origin selection.
 - Horizontal unit length calibration.
 - TikZ export using `.. controls .. and ..`.
+- LuaDraw export using `g:Dbezier(...)` for open paths.
+- CeTZ export using `bezier(...)`.
 - Export precision setting.
-- Basic selected-curve export behavior.
+- Multi-selected-curve export behavior.
+- Undo/redo for drawing history.
+- Closed-path snapping by endpoint proximity.
 
 Still incomplete or not yet implemented:
 
@@ -98,6 +105,8 @@ Still incomplete or not yet implemented:
 - Editable Bezier handles after stroke creation.
 - Reference image move/scale controls. The `locked` state exists in UI data but does not yet drive image interaction.
 - Internationalized locale files despite `svelte-i18n` being installed.
+- Closed-path snap preview indicator while drawing.
+  The intended behavior is a pale-green circular hint shown near the live brush endpoint whenever closed-path snapping is enabled and the endpoint is within the configured snap threshold of the start point.
 
 Defer until the core workflow is stable:
 
@@ -112,11 +121,12 @@ Defer until the core workflow is stable:
 
 - Keep product-specific geometry and export behavior in `src/lib/core`.
 - Keep Svelte components focused on UI composition and browser interaction.
-- Do not make TikZ formatting depend on Svelte component state or Paper.js object instances.
+- Do not make export formatting depend on Svelte component state or Paper.js object instances.
 - Preserve the explicit internal data model in `src/lib/core/types.ts`.
 - Treat Paper.js as the canvas/vector editing runtime, not as the only source of product state.
 - Put expensive browser-side processing in Web Workers when it becomes heavy enough to affect UI responsiveness.
 - Put protected API key usage and server-only integration code under SvelteKit API routes.
+- Snap-preview overlays for in-progress drawing should stay transient in the Paper.js scene and must not mutate persisted curve data before commit.
 
 Core geometry types currently include:
 
@@ -139,6 +149,7 @@ type CurvePath = {
 	segments: CubicBezierSegment[];
 	stroke: string;
 	strokeWidth: number;
+	closed: boolean;
 };
 
 type CoordinateSystem = {
@@ -196,4 +207,7 @@ Before finishing non-trivial code changes, run the narrowest relevant command fi
 - Keep UI text concise and workflow-oriented.
 - Avoid turning the tool into a generic editor; prioritize reference image, calibration, tracing, Bezier editing, and TikZ export.
 - When changing coordinate conversion or exporter behavior, add or update Vitest tests in `src/lib/core`.
+- When changing closed-path snapping, keep the behavior symmetric between canvas state and all export formats.
+- If adding snap previews, prefer lightweight Paper.js overlay state instead of mutating stored curve data before commit.
+- If adding the snap-preview circle, use the same threshold value that drives actual snapping so the preview remains trustworthy.
 - Keep generated files, dependency folders, and build outputs out of manual edits.
