@@ -39,6 +39,8 @@ export type CanvasImage = {
 	locked: boolean;
 };
 
+export type CanvasObjectType = 'image' | 'curve';
+
 export type ToolMode = 'brush' | 'pan';
 
 export type ExportFormat = 'tikz' | 'luadraw' | 'cetz';

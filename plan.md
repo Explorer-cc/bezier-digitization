@@ -6,6 +6,36 @@ The first working web version is implemented. The app is a SvelteKit-based brows
 
 The current implementation is intentionally compact: the MVP UI is concentrated in `src/routes/+page.svelte`, while reusable math and export logic lives in `src/lib/core`.
 
+## Current Goal Status
+
+The current active goal is to keep extending the Paper.js-based object interaction framework instead of replacing the canvas runtime.
+
+Already implemented toward that goal:
+
+- [x] Reference images behave as canvas objects:
+  - selection in pan mode
+  - movement
+  - corner-handle resizing
+  - opacity editing
+  - lock/unlock
+  - fit-to-canvas and reset-transform actions
+- [x] Curves behave as selectable canvas objects:
+  - direct canvas hit-testing
+  - additive multi-selection
+  - right-list and canvas selection stay in sync
+- [x] Single selected curves support direct anchor and Bezier-handle editing on canvas.
+- [x] Multiple selected curves support batch stroke color and width editing.
+- [x] Undo/redo now spans curve creation, curve editing, image editing, and calibration changes.
+- [x] Component extraction has started with `src/components/ObjectPropertiesPanel.svelte`.
+
+Still remaining for this goal:
+
+- [ ] Extract more of the monolithic workspace UI into components, especially the curve list, export panel, toolbar, and canvas workspace shell.
+- [ ] Improve multi-curve edit affordances beyond basic multi-select and batch styling.
+- [ ] Decide whether curves and images need a shared higher-level object store instead of local page state only.
+- [ ] Add project save/load so image state, curve data, and calibration can round-trip together.
+- [ ] Finish a dedicated responsive pass for short viewports after the object UI stabilizes.
+
 ## Implemented MVP
 
 - [x] SvelteKit 2 + Svelte 5 + TypeScript project initialized.
@@ -47,7 +77,13 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Reference image displayed on the canvas.
 - [x] Reference image moved to a dedicated top layer so it stays visible for tracing and point picking.
 - [x] Reference image opacity control implemented.
-- [x] Basic reference image lock/unlock UI added.
+- [x] Reference image object interactions implemented:
+  - object selection in pan mode
+  - movement
+  - corner-handle resizing
+  - opacity control
+  - lock/unlock
+  - fit-to-canvas and reset-transform actions
 - [x] Canvas zoom implemented with mouse wheel.
 - [x] Canvas pan mode implemented.
 - [x] Freehand brush drawing implemented.
@@ -62,9 +98,17 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Clear all curves implemented.
 - [x] Undo last drawn curve implemented.
 - [x] Redo / restore last undone curve implemented.
+- [x] Undo/redo broadened to cover:
+  - curve deletion and clear
+  - curve anchor/control-handle edits
+  - image movement, resizing, opacity, locking, fit, and reset actions
+  - coordinate calibration drags and settings changes
 - [x] Keyboard shortcuts added:
   - `Ctrl+Z` / `Cmd+Z`
   - `Ctrl+Y` / `Cmd+Y`
+  - `Ctrl+Shift+Z` / `Cmd+Shift+Z`
+  - `Escape` to clear object selection
+  - `Delete` / `Backspace` to remove selected curves
 - [x] Origin setting mode implemented.
 - [x] Unit length calibration mode implemented.
 - [x] Unit length can be adjusted by dragging the visible coordinate-axis unit point.
@@ -101,11 +145,17 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Closed-path snapping threshold slider added in the left panel.
 - [x] Closed-path snapping now closes by endpoint snap only and does not resmooth the whole path.
 - [x] Closed-path snap preview circle implemented on the live brush endpoint.
+- [x] Grid-point snapping implemented for brush drawing.
+- [x] Grid-point snapping shares the same pixel-threshold-derived project-space radius as closed-path snapping.
+- [x] Grid snap hit coordinates shown temporarily in the canvas status bar.
 - [x] Closed curves are exported distinctly in all formats.
 - [x] Brush post-processing controls added:
   - simplify tolerance slider
   - smoothing toggle
 - [x] Brush post-processing settings persisted in `localStorage`.
+- [x] Snap settings persisted in `localStorage`:
+  - grid snapping toggle
+  - snap threshold
 - [x] Right-side vertical layout improved:
   - top and bottom drag handles move the fixed-height export-settings block
   - export-settings block height adapts to smaller viewport heights
@@ -118,6 +168,12 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
   - left panel `min-h-0`
   - canvas section `min-h-0` and `overflow-hidden`
   - right panel heights clamped against available height
+- [x] Lightweight Paper.js object-selection layer added for images and curves.
+- [x] Curve paths can be selected directly on the canvas in pan mode.
+- [x] Single selected curves expose editable anchors and Bezier control handles in pan mode.
+- [x] Multiple selected curves support batch color and stroke-width editing from the object-properties panel.
+- [x] Pan-mode hit-testing order clarified so selected-image transforms do not block ordinary curve selection.
+- [x] First UI extraction completed with `src/components/ObjectPropertiesPanel.svelte`.
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
 
 ## Verification Status
@@ -132,22 +188,21 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 ## Known MVP Limitations
 
 - [ ] The UI is still concentrated in `src/routes/+page.svelte`; it should be split into components before the interface grows much more.
-- [ ] Curve editing is limited to selection, deletion, undo/redo, and export.
-- [ ] Canvas click-to-select is not implemented yet; use the curve list for selection.
-- [ ] Anchor points and Bezier handles are not editable yet.
-- [ ] The reference image lock/unlock control is present, but image transform editing is not yet fully implemented.
+- [ ] Component extraction has started, but most of the workspace and panel UI still lives in `src/routes/+page.svelte`.
+- [ ] Curve click-to-select, additive canvas selection, and basic batch style editing are implemented, but richer multi-select edit affordances still need work.
 - [ ] There is no layer model yet.
 - [ ] There is no project save/load format yet.
 - [ ] i18n files are not wired into the UI yet.
 - [ ] Manual LaTeX/TikZ compile verification still needs to be done with exported output.
 - [ ] Closed-path snapping uses a simple endpoint-distance heuristic only.
+- [ ] Grid snapping currently targets integer coordinate intersections only; there is no separate mode for axis-only or major-grid-only snapping.
 - [ ] Very small viewport layouts still need a dedicated responsive pass.
 
 ## Next TodoList
 
 ### 1. Refactor MVP UI Into Components
 
-- [ ] Add resizable left and right side panels before component extraction:
+- [x] Add resizable left and right side panels before component extraction:
   - left panel default width: `280px`
   - right panel default width: `360px`
   - drag handles between left/canvas and canvas/right
@@ -182,23 +237,25 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 
 ### 3. Improve Reference Image Handling
 
-- [ ] Implement image drag/move when unlocked.
-- [ ] Implement image scale controls.
-- [ ] Implement image fit-to-canvas.
-- [ ] Implement image reset transform.
+- [x] Implement image drag/move when unlocked.
+- [x] Implement image scale controls.
+- [x] Implement image fit-to-canvas.
+- [x] Implement image reset transform.
 - [ ] Add brightness and contrast controls if needed.
 
 ### 4. Improve Curve Interaction
 
 - [ ] Implement manual Bezier pen tool.
-- [ ] Add visible anchors for selected curve.
-- [ ] Add visible control handles for selected curve.
-- [ ] Let users drag anchors and control handles.
-- [ ] Add curve rename.
-- [ ] Add curve color and stroke width editing after creation.
+- [x] Add visible anchors for selected curve.
+- [x] Add visible control handles for selected curve.
+- [x] Let users drag anchors and control handles.
+- [x] Add curve rename.
+- [x] Add curve color and stroke width editing after creation.
 - [x] Add undo/redo for drawing.
-- [ ] Broaden undo/redo to cover deletion, clear, calibration, and image changes.
+- [x] Broaden undo/redo to cover deletion, clear, calibration, and image changes.
 - [x] Add closed-path snap preview when the brush endpoint is within the configured snap threshold.
+- [ ] Consider splitting snap settings into a dedicated section once brush options grow further.
+- [ ] Decide whether grid snapping should support only integer intersections or configurable step sizes.
 
 ### 5. Improve Coordinate Calibration
 
@@ -216,7 +273,14 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Remove remaining assumptions that important actions can live on the bottom edge.
 - [ ] Replace piecemeal height clamps with a clearer responsive strategy for the right panel.
 
-### 7. Improve Export
+### 7. Improve Snapping
+
+- [ ] Add visual priority rules or UI hints when grid snapping and closed-path snapping compete.
+- [ ] Consider optional snapping to axis lines without requiring full grid-point snapping.
+- [ ] Consider optional snapping to major grid intervals rather than only integer coordinates.
+- [ ] Add tests for snap-radius consistency across zoom levels.
+
+### 8. Improve Export
 
 - [x] Allow exporting selected curves only; when nothing is selected, output is empty.
 - [ ] Add explicit export-mode toggle for selected/all if needed.
@@ -233,7 +297,7 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Test exported LuaDraw in a minimal LuaLaTeX document.
 - [ ] Test exported CeTZ in a minimal Typst document.
 
-### 8. Add i18n Foundation
+### 9. Add i18n Foundation
 
 - [ ] Create `src/lib/i18n/index.ts`.
 - [ ] Create `src/lib/i18n/locales/zh.json`.
@@ -241,7 +305,7 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Replace hard-coded UI text with translation keys.
 - [ ] Default to Chinese UI.
 
-### 9. Add More Tests
+### 10. Add More Tests
 
 - [ ] Add tests for unit calibration edge cases.
 - [ ] Add tests for rotated coordinate basis.

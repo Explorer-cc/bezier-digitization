@@ -18,6 +18,8 @@ The immediate product direction is browser-first. Do not add Electron, Tauri, or
 
 ```text
 src/
+  components/
+    ObjectPropertiesPanel.svelte # Shared object-properties UI for image and curve objects.
   routes/
     +layout.svelte       # Imports global CSS and favicon.
     +page.svelte         # Current main application UI and Paper.js canvas workflow.
@@ -47,8 +49,9 @@ The main screen is currently implemented in `src/routes/+page.svelte`. It includ
 - A Paper.js canvas with zoom via mouse wheel and pan mode.
 - Freehand brush drawing with explicit simplify-tolerance and smoothing controls.
 - Conversion of drawn paths into internal cubic Bezier segment data.
-- Curve list with multi-selection, selection highlighting, delete, and clear actions.
-- Undo and redo for drawn curves, including keyboard shortcuts.
+- Curve list with multi-selection, selection highlighting, delete, clear, and batch style-edit actions.
+- Undo and redo for curve creation/deletion, curve edits, image edits, and calibration changes, including keyboard shortcuts.
+- Keyboard object-editing shortcuts for cancel-selection and delete-selected-curve actions.
 - Coordinate origin handle and horizontally constrained unit-length handle.
 - Fixed horizontal x-axis and vertical y-axis calibration behavior.
 - Grid rendering based on calibrated unit length.
@@ -56,9 +59,36 @@ The main screen is currently implemented in `src/routes/+page.svelte`. It includ
 - Export precision and export-format switching for TikZ, LuaDraw, and CeTZ.
 - Closed-path snapping toggle and configurable snap threshold.
 - Pale-green closed-path snap preview circle during active brush drawing.
-- Brush post-processing settings persisted in `localStorage`.
+- Grid-point snapping that shares the same snap radius as closed-path snapping.
+- Snap-hit coordinate feedback in the canvas status bar while grid snapping is active.
+- Brush post-processing and snap settings persisted in `localStorage`.
+- A lightweight Paper.js object-selection layer for images and curves.
+- Canvas hit-testing for both reference images and curve paths in pan mode, with explicit priority between curve handles, image handles, curves, and image bodies.
+- On-canvas anchor and Bezier-handle editing for a single selected curve in pan mode.
+- Selected-object properties in the left panel instead of a static reference-image section.
+- Initial component extraction started with a dedicated object-properties panel.
 - Resizable and collapsible left/right panels persisted in `localStorage`.
 - Adaptive right-side vertical layout with draggable separators and height clamping for smaller viewports.
+
+## Current Goal Progress
+
+The current implementation direction is to keep building a unified Paper.js object-interaction layer for reference images and curves.
+
+Already implemented for that goal:
+
+- Reference images are selectable objects with move, resize, opacity, lock, fit, and reset-transform actions.
+- Curves are selectable objects on the canvas, not only in the right-side list.
+- A single selected curve exposes editable anchors and Bezier control handles directly on canvas.
+- Multiple selected curves support batch color and stroke-width editing.
+- Undo/redo now covers object edits and calibration changes, not just brush-created curve insertion.
+- Initial component extraction has started with `src/components/ObjectPropertiesPanel.svelte`.
+
+Still remaining for that goal:
+
+- More component extraction, especially the curve list, toolbar, export panel, and canvas workspace shell.
+- Richer multi-curve editing affordances beyond batch styling and single-curve handle editing.
+- Project save/load for image, curves, and calibration state.
+- A more deliberate responsive pass once the object model settles.
 
 The current UI is functional but still monolithic. When adding substantial features, prefer extracting UI-only pieces into `src/components` and keeping business logic in `src/lib/core`.
 
@@ -94,23 +124,27 @@ Already present in some form:
 - CeTZ export using `bezier(...)`.
 - Export precision setting.
 - Multi-selected-curve export behavior.
-- Undo/redo for drawing history.
+- Undo/redo for drawing, curve edits, image edits, and calibration updates.
 - Closed-path snapping by endpoint proximity.
 - Closed-path snap preview indicator while drawing.
-- Local persistence for brush post-processing settings.
+- Grid-point snapping to calibrated integer coordinate intersections.
+- Local persistence for brush post-processing and snap settings.
+- Reference image object selection, movement, corner-handle resizing, opacity control, locking, fit-to-canvas, and reset-transform actions.
+- Canvas click selection for curve objects.
+- Single-curve anchor and control-handle editing on canvas.
+- Batch stroke-color and stroke-width editing for multiple selected curves.
 
 Still incomplete or not yet implemented:
 
-- Dedicated component structure under `src/components`.
+- Broader component structure under `src/components`; only the object-properties panel has been extracted so far.
 - Shared stores in `src/stores.ts`.
 - Web Worker processing under `src/lib/workers`.
 - API routes under `src/routes/api`.
 - LLM provider abstraction under `src/lib/llm`.
-- Editable Bezier handles after stroke creation.
-- Reference image move/scale controls. The `locked` state exists in UI data but does not yet drive image interaction.
 - Internationalized locale files despite `svelte-i18n` being installed.
 - Full project save/load.
 - Dedicated responsive cleanup for very short viewport heights.
+- Multi-curve canvas edit affordances beyond the current single-curve handle editor.
 
 Defer until the core workflow is stable:
 
@@ -132,6 +166,8 @@ Defer until the core workflow is stable:
 - Put protected API key usage and server-only integration code under SvelteKit API routes.
 - Snap-preview overlays for in-progress drawing should stay transient in the Paper.js scene and must not mutate persisted curve data before commit.
 - The snap-preview circle must use the same screen-pixel threshold mapped into project coordinates as the actual closed-path snapping logic.
+- Grid-point snapping must use the same threshold radius and preview-circle style as closed-path snapping.
+- If both grid snapping and closed-path snapping are eligible during brush drawing, grid-point snapping currently takes precedence for the live sampled point and preview.
 - Reference images should remain on their own Paper.js layer and stay visually above curves and calibration graphics.
 
 Core geometry types currently include:
