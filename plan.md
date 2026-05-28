@@ -15,9 +15,9 @@ Already implemented toward that goal:
 - [x] Reference images behave as canvas objects:
   - selection in pan mode
   - movement
-  - corner-handle resizing
-  - opacity editing
-  - lock/unlock
+  - corner-handle resizing (4 corners)
+  - opacity editing (side panel)
+  - lock/unlock (side panel)
   - fit-to-canvas and reset-transform actions
 - [x] Curves behave as selectable canvas objects:
   - direct canvas hit-testing
@@ -30,9 +30,15 @@ Already implemented toward that goal:
 - [x] Closed-path snapping works during curve anchor dragging: dragging the first or last anchor near the opposite endpoint snaps and auto-closes the curve.
 - [x] Component extraction completed with eight UI components under `src/components/`:
   - Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
+- [x] Right-side panel drag separator no longer overlaps the curve list panel (added `shrink-0 overflow-hidden` to curve list wrapper).
+- [x] Toolbar label changed: "平移" → "移动".
+- [x] Copy and download buttons moved from Header to ExportPanel's code output header area.
 
 Still remaining for this goal:
 
+- [ ] Fix image corner resize handles (currently non-functional) and extend to 8 handles (4 corners + 4 edge midpoints).
+- [ ] Add image rotation via a top-center drag handle (Figma-style).
+- [ ] Add on-canvas lock toggle and opacity control as Paper.js graphics at the image top-right corner.
 - [ ] Improve multi-curve edit affordances beyond basic multi-select and batch styling.
 - [ ] Decide whether curves and images need a shared higher-level object store instead of local page state only.
 - [ ] Add project save/load so image state, curve data, and calibration can round-trip together.
@@ -180,6 +186,76 @@ Still remaining for this goal:
 - [x] First UI extraction completed with `src/components/ObjectPropertiesPanel.svelte`.
 - [x] Full UI component extraction completed: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, CurveListPanel, ExportPanel.
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
+- [x] Right-side curve list panel wrapper given `shrink-0 overflow-hidden` so the ExportPanel cannot overlap it when the drag separator is moved upward.
+- [x] Toolbar pan label changed from "平移" to "移动".
+- [x] Copy-code and download buttons consolidated into the ExportPanel code output header (moved from Header).
+- [x] Header no longer contains the copy-export button; it only has title and image upload.
+
+## Image Interaction Improvement Plan
+
+### Problem: Corner Resize Handles Don't Work
+
+The current image resize uses 4 corner handles drawn on the Paper.js selection layer. The hit-test flow:
+
+1. `hitCurveHandle` — runs `selectionLayer.hitTest` with `match: data.handleKind`. Image handle circles have no `data.handleKind`, so match rejects them. Returns null.
+2. `hitImageHandle` — checks `selectedImage && !locked`, then mathematically tests distance to each corner of `getSelectedImageBounds()`.
+3. `hitImageBody` — tests `referenceRaster.bounds.contains(point)`.
+4. `onMouseDown` routes by target kind: `image-handle` → sets `activeImageHandle` and `imageStartBounds` → `onMouseDrag` → `resizeImageFromHandle`.
+
+The code path is logically correct but the user reports resize does not work. Planned fix: rewrite the resize system entirely with 8 handles and improved resize math, which will also resolve any latent issues.
+
+### Planned Changes
+
+**Files to change:**
+
+- `src/lib/core/types.ts` — add `rotation: number` to `CanvasImage`
+- `src/routes/+page.svelte` — all interaction logic
+
+#### Step 1: 8 Resize Handles
+
+Extend `getImageHandleCenters` from 4 to 8 handles:
+- Corners: `nw, ne, sw, se`
+- Edge midpoints: `n` (topCenter), `e` (rightCenter), `s` (bottomCenter), `w` (leftCenter)
+
+Rewrite `resizeImageFromHandle`:
+- **Corner handles**: free resize (independent width/height), anchor the opposite corner
+- **Edge handles**: single-axis resize — `n`/`s` only change height, `e`/`w` only change width
+
+Update `drawObjectSelectionOverlay` to draw 8 circles.
+Update `hitImageHandle` to check all 8 positions.
+Extend `activeImageHandle` type to include `'n' | 'e' | 's' | 'w'`.
+
+#### Step 2: Rotation Handle
+
+Add `rotation: number` (degrees) to `CanvasImage`.
+
+Render in `drawObjectSelectionOverlay`:
+- Vertical line (stem) from top-center upward
+- Green circle at the tip (rotation grip)
+
+Interaction:
+- `onMouseDown`: set `activeImageHandle = 'rotate'`, record initial angle from center to mouse
+- `onMouseDrag`: compute angle delta, apply to `referenceRaster.rotation`, sync state
+- `onMouseUp`: `finalizePendingEditHistory('已旋转参考图')`
+
+State sync:
+- `syncImageStateFromRaster`: read `referenceRaster.rotation`
+- `applyImageBounds`: after `fitBounds`, re-apply rotation
+- `resetImageTransform`: reset rotation to 0
+
+Rotated resize: transform mouse into image-local coordinates (un-rotate around center), resize, then re-rotate.
+
+#### Step 3: On-Canvas Lock and Opacity Controls
+
+Render as Paper.js graphics at image top-right:
+- **Lock button**: rounded rect with lock/unlock Unicode character
+- **Opacity indicator**: circle with fill proportional to opacity; click cycles presets `[1, 0.75, 0.5, 0.25]`
+
+Hit-testing: new `hitImageControls` function or extend `hitImageHandle` with `'lock-toggle'` and `'opacity-cycle'` types.
+
+Interaction:
+- **Lock toggle**: immediate action in `onMouseDown`, no drag
+- **Opacity cycle**: immediate action, cycle through presets
 
 ## Verification Status
 
@@ -248,6 +324,9 @@ Still remaining for this goal:
 - [x] Implement image scale controls.
 - [x] Implement image fit-to-canvas.
 - [x] Implement image reset transform.
+- [ ] Fix corner resize handles (currently non-functional) and extend to 8 handles (4 corners + 4 edge midpoints) with free corner resize and single-axis edge resize.
+- [ ] Add rotation field to `CanvasImage` type and rotation drag handle above the image (Figma-style).
+- [ ] Add on-canvas lock toggle and opacity control as Paper.js graphics at the image top-right corner.
 - [ ] Add brightness and contrast controls if needed.
 
 ### 4. Improve Curve Interaction

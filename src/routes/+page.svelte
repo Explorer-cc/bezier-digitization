@@ -43,6 +43,9 @@
 	type PaperMouseEvent = paper.ToolEvent;
 	type PaperSize = paper.Size;
 	type PaperRectangle = paper.Rectangle;
+	type ImageResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+	type ImageHandle = 'move' | 'rotate' | ImageResizeHandle;
+	type ImageTransformSnapshot = Pick<CanvasImage, 'x' | 'y' | 'width' | 'height' | 'rotation'>;
 
 	let paper: PaperScope | null = null;
 	let canvas: HTMLCanvasElement;
@@ -57,7 +60,7 @@
 	let canvasResizeFrame = 0;
 	let pointerStart: Point | null = null;
 	let activeHandle: 'origin' | 'unit' | null = null;
-	let activeImageHandle: 'move' | 'nw' | 'ne' | 'sw' | 'se' | null = null;
+	let activeImageHandle: ImageHandle | null = null;
 	let activeCurveHandle:
 		| {
 				curveId: string;
@@ -65,7 +68,8 @@
 				index: number;
 		  }
 		| null = null;
-	let imageStartBounds: { x: number; y: number; width: number; height: number } | null = null;
+	let imageStartTransform: ImageTransformSnapshot | null = null;
+	let imageRotationStartAngle = 0;
 	let imageNaturalSize: { width: number; height: number } | null = null;
 	let hasInitializedCoordinateSystem = false;
 
@@ -117,6 +121,7 @@
 	let canvasReady = $state(false);
 	let status = $state('选择图片或直接用画笔描曲线');
 	let snapPreviewStatus = $state('');
+	let hoverCanvasCursor = $state<string | null>(null);
 
 	let rightSettingsPanelHeight = $state(210);
 
@@ -139,7 +144,10 @@
 	let workspaceGridColumns = $derived(
 		`${leftPanelCollapsed ? 0 : leftPanelWidth}px 28px 6px minmax(0, 1fr) 6px 28px ${rightPanelCollapsed ? 0 : rightPanelWidth}px`
 	);
-	let canvasCursorClass = $derived(activeTool === 'pan' ? 'cursor-pan-tool' : 'cursor-crosshair');
+	let canvasCursorClass = $derived.by(() => {
+		if (hoverCanvasCursor) return hoverCanvasCursor;
+		return activeTool === 'pan' ? 'cursor-pan-tool' : 'cursor-crosshair';
+	});
 	let overlayStatus = $derived(snapPreviewStatus ? `${status} | ${snapPreviewStatus}` : status);
 
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -332,9 +340,161 @@
 	function setTool(mode: ToolMode) {
 		activeTool = mode;
 		activeHandle = null;
+		hoverCanvasCursor = null;
 		clearClosedPathSnapPreview();
 		document.body.classList.remove('cursor-pan-tool');
 		updateStatusForTool();
+	}
+
+	function getCursorClassForImageHandle(handle: ImageResizeHandle) {
+		switch (handle) {
+			case 'nw':
+			case 'se':
+				return 'cursor-nwse-resize';
+			case 'ne':
+			case 'sw':
+				return 'cursor-nesw-resize';
+			case 'n':
+			case 's':
+				return 'cursor-ns-resize';
+			case 'e':
+			case 'w':
+				return 'cursor-ew-resize';
+		}
+	}
+
+	function getImageCenter(source: Pick<CanvasImage, 'x' | 'y' | 'width' | 'height'>) {
+		return {
+			x: source.x + source.width / 2,
+			y: source.y + source.height / 2
+		};
+	}
+
+	function rotatePoint(point: Point, center: Point, angleDegrees: number) {
+		const radians = (angleDegrees * Math.PI) / 180;
+		const cos = Math.cos(radians);
+		const sin = Math.sin(radians);
+		const dx = point.x - center.x;
+		const dy = point.y - center.y;
+		return {
+			x: center.x + dx * cos - dy * sin,
+			y: center.y + dx * sin + dy * cos
+		};
+	}
+
+	function rotateVector(vector: Point, angleDegrees: number) {
+		const radians = (angleDegrees * Math.PI) / 180;
+		const cos = Math.cos(radians);
+		const sin = Math.sin(radians);
+		return {
+			x: vector.x * cos - vector.y * sin,
+			y: vector.x * sin + vector.y * cos
+		};
+	}
+
+	function toImageLocalVector(point: Point, source: ImageTransformSnapshot) {
+		const center = getImageCenter(source);
+		return rotateVector(
+			{
+				x: point.x - center.x,
+				y: point.y - center.y
+			},
+			-source.rotation
+		);
+	}
+
+	function normalizeDegrees(angle: number) {
+		let normalized = angle % 360;
+		if (normalized > 180) normalized -= 360;
+		if (normalized <= -180) normalized += 360;
+		return normalized;
+	}
+
+	function getImageSelectionGeometry(source: CanvasImage) {
+		const center = getImageCenter(source);
+		const baseCorners = {
+			nw: { x: source.x, y: source.y },
+			ne: { x: source.x + source.width, y: source.y },
+			se: { x: source.x + source.width, y: source.y + source.height },
+			sw: { x: source.x, y: source.y + source.height }
+		};
+		const corners = {
+			nw: rotatePoint(baseCorners.nw, center, source.rotation),
+			ne: rotatePoint(baseCorners.ne, center, source.rotation),
+			se: rotatePoint(baseCorners.se, center, source.rotation),
+			sw: rotatePoint(baseCorners.sw, center, source.rotation)
+		};
+		const edgeCenters = {
+			n: {
+				x: (corners.nw.x + corners.ne.x) / 2,
+				y: (corners.nw.y + corners.ne.y) / 2
+			},
+			e: {
+				x: (corners.ne.x + corners.se.x) / 2,
+				y: (corners.ne.y + corners.se.y) / 2
+			},
+			s: {
+				x: (corners.sw.x + corners.se.x) / 2,
+				y: (corners.sw.y + corners.se.y) / 2
+			},
+			w: {
+				x: (corners.nw.x + corners.sw.x) / 2,
+				y: (corners.nw.y + corners.sw.y) / 2
+			}
+		};
+		const rotateOffset = rotateVector({ x: 0, y: -28 / (paper?.view.zoom ?? 1) }, source.rotation);
+		return {
+			corners,
+			handles: {
+				...corners,
+				...edgeCenters
+			},
+			rotationStemStart: edgeCenters.n,
+			rotationHandle: {
+				x: edgeCenters.n.x + rotateOffset.x,
+				y: edgeCenters.n.y + rotateOffset.y
+			}
+		};
+	}
+
+	function updateCanvasHoverCursor(point: Point) {
+		if (!paper || activeHandle || activeCurveHandle || activeImageHandle || pointerStart || activePath) {
+			hoverCanvasCursor = null;
+			return;
+		}
+
+		if (activeTool !== 'pan') {
+			hoverCanvasCursor = null;
+			return;
+		}
+
+		const calibrationHandle = hitCalibrationHandle(point);
+		if (calibrationHandle) {
+			hoverCanvasCursor = 'cursor-pan-tool';
+			return;
+		}
+
+		const target = resolvePanPointerTarget(point);
+		if (!target) {
+			hoverCanvasCursor = 'cursor-pan-tool';
+			return;
+		}
+
+			switch (target.kind) {
+			case 'image-handle':
+				hoverCanvasCursor =
+					target.imageHandle === 'rotate'
+						? 'cursor-rotate-tool'
+						: getCursorClassForImageHandle(target.imageHandle);
+				return;
+			case 'image-body':
+			case 'curve-handle':
+				hoverCanvasCursor = 'cursor-pan-tool';
+				return;
+			case 'curve':
+				hoverCanvasCursor = 'cursor-pointer';
+				return;
+		}
 	}
 
 	function hitCalibrationHandle(point: Point) {
@@ -359,11 +519,6 @@
 		const layer = new paper.Layer();
 		layer.name = name;
 		return layer;
-	}
-
-	function getSelectedImageBounds() {
-		if (!image || !paper) return null;
-		return new paper.Rectangle(image.x, image.y, image.width, image.height);
 	}
 
 	function setSelectedImage() {
@@ -450,6 +605,21 @@
 		};
 	}
 
+	function applyImageStateToRaster() {
+		if (!paper || !referenceRaster || !image || !imageNaturalSize) return;
+		const safeWidth = Math.max(image.width, 24 / paper.view.zoom);
+		const safeHeight = Math.max(image.height, 24 / paper.view.zoom);
+		const center = getImageCenter(image);
+		referenceRaster.matrix = new paper.Matrix();
+		referenceRaster.position = new paper.Point(center.x, center.y);
+		referenceRaster.scale(safeWidth / imageNaturalSize.width, safeHeight / imageNaturalSize.height);
+		referenceRaster.position = new paper.Point(center.x, center.y);
+		if (image.rotation !== 0) {
+			referenceRaster.rotate(image.rotation, new paper.Point(center.x, center.y));
+		}
+		referenceRaster.opacity = image.opacity;
+	}
+
 	function syncReferenceRasterToImageState() {
 		if (!paper) return;
 		const referenceLayer = getOrCreateLayer('reference');
@@ -475,25 +645,13 @@
 					width: referenceRaster.width,
 					height: referenceRaster.height
 				};
-				applyImageBounds({
-					x: image.x,
-					y: image.y,
-					width: image.width,
-					height: image.height
-				});
-				referenceRaster.opacity = image.opacity;
+				applyImageStateToRaster();
 				drawObjectSelectionOverlay();
 			};
 			return;
 		}
 
-		applyImageBounds({
-			x: image.x,
-			y: image.y,
-			width: image.width,
-			height: image.height
-		});
-		referenceRaster.opacity = image.opacity;
+		applyImageStateToRaster();
 		drawObjectSelectionOverlay();
 	}
 
@@ -515,7 +673,7 @@
 		selectedObject = cloneSelectedObjectState(snapshot.selectedObject);
 		activeCurveHandle = null;
 		activeImageHandle = null;
-		imageStartBounds = null;
+		imageStartTransform = null;
 		syncReferenceRasterToImageState();
 		redrawCurves();
 		drawObjectSelectionOverlay();
@@ -581,16 +739,6 @@
 		previewLayer.bringToFront();
 		selectionLayer.bringToFront();
 	}
-
-	function getImageHandleCenters(bounds: PaperRectangle) {
-		return {
-			nw: bounds.topLeft,
-			ne: bounds.topRight,
-			sw: bounds.bottomLeft,
-			se: bounds.bottomRight
-		};
-	}
-
 	function drawObjectSelectionOverlay() {
 		if (!paper || !project) return;
 		const scope = paper;
@@ -599,24 +747,71 @@
 		layer.removeChildren();
 
 		if (selectedImage) {
-			const bounds = getSelectedImageBounds();
-			if (bounds) {
-				new scope.Path.Rectangle({
-					rectangle: bounds,
+			const geometry = getImageSelectionGeometry(selectedImage);
+			new scope.Path({
+				segments: [
+					new scope.Point(geometry.corners.nw.x, geometry.corners.nw.y),
+					new scope.Point(geometry.corners.ne.x, geometry.corners.ne.y),
+					new scope.Point(geometry.corners.se.x, geometry.corners.se.y),
+					new scope.Point(geometry.corners.sw.x, geometry.corners.sw.y)
+				],
+				closed: true,
+				strokeColor: '#16a34a',
+				strokeWidth: 2 / scope.view.zoom,
+				dashArray: [8 / scope.view.zoom, 5 / scope.view.zoom],
+				parent: layer
+			});
+			if (!selectedImage.locked) {
+				new scope.Path.Line({
+					from: new scope.Point(
+						geometry.rotationStemStart.x,
+						geometry.rotationStemStart.y
+					),
+					to: new scope.Point(geometry.rotationHandle.x, geometry.rotationHandle.y),
 					strokeColor: '#16a34a',
 					strokeWidth: 2 / scope.view.zoom,
-					dashArray: [8 / scope.view.zoom, 5 / scope.view.zoom],
 					parent: layer
 				});
-				const handles = getImageHandleCenters(bounds);
-				for (const center of Object.values(handles)) {
-					new scope.Path.Circle({
-						center,
-						radius: 6 / scope.view.zoom,
-						fillColor: '#16a34a',
-						strokeColor: '#ffffff',
+				new scope.Path.Circle({
+					center: new scope.Point(geometry.rotationHandle.x, geometry.rotationHandle.y),
+					radius: 6 / scope.view.zoom,
+					fillColor: '#ffffff',
+					strokeColor: '#16a34a',
+					strokeWidth: 2 / scope.view.zoom,
+					parent: layer,
+					data: { imageHandle: 'rotate' }
+				});
+				const handles = geometry.handles;
+				const cornerNames = ['nw', 'ne', 'se', 'sw'] as const;
+				const edgeNames = ['n', 'e', 's', 'w'] as const;
+				const handleSize = 6 / scope.view.zoom;
+				for (const name of cornerNames) {
+					const center = handles[name];
+					const rect = new scope.Rectangle(
+						center.x - handleSize,
+						center.y - handleSize,
+						handleSize * 2,
+						handleSize * 2
+					);
+					new scope.Path.Rectangle({
+						rectangle: rect,
+						fillColor: '#ffffff',
+						strokeColor: '#16a34a',
 						strokeWidth: 2 / scope.view.zoom,
-						parent: layer
+						parent: layer,
+						data: { imageHandle: name }
+					});
+				}
+				for (const name of edgeNames) {
+					const center = handles[name];
+					new scope.Path.Circle({
+						center: new scope.Point(center.x, center.y),
+						radius: 5 / scope.view.zoom,
+						fillColor: '#ffffff',
+						strokeColor: '#16a34a',
+						strokeWidth: 2 / scope.view.zoom,
+						parent: layer,
+						data: { imageHandle: name }
 					});
 				}
 			}
@@ -705,22 +900,21 @@
 	}
 
 	function hitImageHandle(point: Point) {
-		if (!selectedImage || !paper) return null;
-		const bounds = getSelectedImageBounds();
-		if (!bounds) return null;
-		const threshold = 10 / paper.view.zoom;
-		const handles = getImageHandleCenters(bounds);
-		for (const [name, center] of Object.entries(handles)) {
-			if (center.getDistance(new paper.Point(point.x, point.y)) <= threshold) {
-				return name as 'nw' | 'ne' | 'sw' | 'se';
-			}
+		if (selectedObject?.type !== 'image' || !image || !paper) return null;
+		const selectionLayer = getOrCreateLayer('selection');
+		if (!selectionLayer) return null;
+			const hit = selectionLayer.hitTest(new paper.Point(point.x, point.y), {
+				fill: true,
+				stroke: true,
+			tolerance: 10 / paper.view.zoom,
+			match: (result: paper.HitResult) => typeof result.item.data?.imageHandle === 'string'
+		});
+		return (hit?.item?.data?.imageHandle as Exclude<ImageHandle, 'move'> | undefined) ?? null;
 		}
-		return null;
-	}
 
 	function hitImageBody(point: Point) {
 		if (!image || !referenceRaster || !paper) return false;
-		return referenceRaster.bounds.contains(new paper.Point(point.x, point.y));
+		return referenceRaster.contains(new paper.Point(point.x, point.y));
 	}
 
 	function hitCurve(point: Point) {
@@ -765,15 +959,18 @@
 			return { kind: 'curve-handle' as const, curveHandle };
 		}
 
-		const imageHandle = selectedImage && !selectedImage.locked ? hitImageHandle(point) : null;
-		if (imageHandle) {
-			return { kind: 'image-handle' as const, imageHandle };
+		const isImageSelected = selectedObject?.type === 'image' && image && !image.locked;
+		if (isImageSelected) {
+			const imageHandle = hitImageHandle(point);
+			if (imageHandle) {
+				return { kind: 'image-handle' as const, imageHandle };
+			}
 		}
 
 		const curveId = hitCurve(point);
 		const imageBodyHit = hitImageBody(point);
 
-		if (selectedImage && !selectedImage.locked && imageBodyHit) {
+		if (isImageSelected && imageBodyHit) {
 			return { kind: 'image-body' as const };
 		}
 
@@ -1471,8 +1668,9 @@
 			y: 0,
 			width: 0,
 			height: 0,
+			rotation: 0,
 			opacity: 0.65,
-			locked: true
+			locked: false
 		};
 
 		const referenceLayer = getOrCreateLayer('reference');
@@ -1489,14 +1687,13 @@
 				width: referenceRaster.width,
 				height: referenceRaster.height
 			};
-			referenceRaster.position = paper!.view.center;
-			referenceRaster.opacity = image?.opacity ?? 0.65;
 			image = {
 				...image!,
-				x: referenceRaster.bounds.x,
-				y: referenceRaster.bounds.y,
-				width: referenceRaster.bounds.width,
-				height: referenceRaster.bounds.height
+				x: paper!.view.center.x - imageNaturalSize.width / 2,
+				y: paper!.view.center.y - imageNaturalSize.height / 2,
+				width: imageNaturalSize.width,
+				height: imageNaturalSize.height,
+				rotation: 0
 			};
 			setSelectedImage();
 			fitImageToCanvas();
@@ -1539,61 +1736,224 @@
 		}, nextLocked ? '已锁定参考图' : '已解锁参考图');
 	}
 
-	function syncImageStateFromRaster() {
-		if (!referenceRaster || !image) return;
-		image = {
-			...image,
-			x: referenceRaster.bounds.x,
-			y: referenceRaster.bounds.y,
-			width: referenceRaster.bounds.width,
-			height: referenceRaster.bounds.height
-		};
-		drawObjectSelectionOverlay();
-	}
-
 	function applyImageBounds(bounds: { x: number; y: number; width: number; height: number }) {
 		if (!referenceRaster || !image || !paper) return;
 		const safeWidth = Math.max(bounds.width, 24 / paper.view.zoom);
 		const safeHeight = Math.max(bounds.height, 24 / paper.view.zoom);
-		const rectangle = new paper.Rectangle(bounds.x, bounds.y, safeWidth, safeHeight);
-		referenceRaster.fitBounds(rectangle, true);
-		syncImageStateFromRaster();
+		image = {
+			...image,
+			x: bounds.x,
+			y: bounds.y,
+			width: safeWidth,
+			height: safeHeight
+		};
+		applyImageStateToRaster();
+		drawObjectSelectionOverlay();
 	}
 
 	function moveImageBy(delta: Point) {
 		if (!referenceRaster || !image || !paper) return;
-		referenceRaster.position = referenceRaster.position.add(new paper.Point(delta.x, delta.y));
-		syncImageStateFromRaster();
+		image = {
+			...image,
+			x: image.x + delta.x,
+			y: image.y + delta.y
+		};
+		applyImageStateToRaster();
+		drawObjectSelectionOverlay();
 	}
 
-	function resizeImageFromHandle(handle: 'nw' | 'ne' | 'sw' | 'se', point: Point) {
-		if (!image || !paper || !imageStartBounds) return;
-		const startRect = new paper.Rectangle(
-			imageStartBounds.x,
-			imageStartBounds.y,
-			imageStartBounds.width,
-			imageStartBounds.height
-		);
-		const pointer = new paper.Point(point.x, point.y);
-		const anchorMap = {
-			nw: startRect.bottomRight,
-			ne: startRect.bottomLeft,
-			sw: startRect.topRight,
-			se: startRect.topLeft
+
+	function resizeImageFromHandle(
+		handle: ImageResizeHandle,
+		point: Point,
+		preserveAspectRatio = false
+	) {
+		if (!image || !paper || !imageStartTransform) return;
+		const minWidth = 24 / paper.view.zoom;
+		const minHeight = 24 / paper.view.zoom;
+		const start = imageStartTransform;
+		const localPoint = toImageLocalVector(point, start);
+		const aspectRatio = start.width / start.height;
+		let left = -start.width / 2;
+		let right = start.width / 2;
+		let top = -start.height / 2;
+		let bottom = start.height / 2;
+
+		switch (handle) {
+			case 'nw':
+				left = Math.min(localPoint.x, right - minWidth);
+				top = Math.min(localPoint.y, bottom - minHeight);
+				break;
+			case 'n':
+				top = Math.min(localPoint.y, bottom - minHeight);
+				break;
+			case 'ne':
+				right = Math.max(localPoint.x, left + minWidth);
+				top = Math.min(localPoint.y, bottom - minHeight);
+				break;
+			case 'e':
+				right = Math.max(localPoint.x, left + minWidth);
+				break;
+			case 'se':
+				right = Math.max(localPoint.x, left + minWidth);
+				bottom = Math.max(localPoint.y, top + minHeight);
+				break;
+			case 's':
+				bottom = Math.max(localPoint.y, top + minHeight);
+				break;
+			case 'sw':
+				left = Math.min(localPoint.x, right - minWidth);
+				bottom = Math.max(localPoint.y, top + minHeight);
+				break;
+			case 'w':
+				left = Math.min(localPoint.x, right - minWidth);
+				break;
+		}
+
+		if (preserveAspectRatio) {
+			switch (handle) {
+				case 'nw': {
+					const fixedRight = start.width / 2;
+					const fixedBottom = start.height / 2;
+					let width = Math.max(fixedRight - localPoint.x, minWidth);
+					let height = Math.max(fixedBottom - localPoint.y, minHeight);
+					if (width / aspectRatio >= height) {
+						height = Math.max(width / aspectRatio, minHeight);
+					} else {
+						width = Math.max(height * aspectRatio, minWidth);
+					}
+					left = fixedRight - width;
+					top = fixedBottom - height;
+					right = fixedRight;
+					bottom = fixedBottom;
+					break;
+				}
+				case 'ne': {
+					const fixedLeft = -start.width / 2;
+					const fixedBottom = start.height / 2;
+					let width = Math.max(localPoint.x - fixedLeft, minWidth);
+					let height = Math.max(fixedBottom - localPoint.y, minHeight);
+					if (width / aspectRatio >= height) {
+						height = Math.max(width / aspectRatio, minHeight);
+					} else {
+						width = Math.max(height * aspectRatio, minWidth);
+					}
+					left = fixedLeft;
+					top = fixedBottom - height;
+					right = fixedLeft + width;
+					bottom = fixedBottom;
+					break;
+				}
+				case 'se': {
+					const fixedLeft = -start.width / 2;
+					const fixedTop = -start.height / 2;
+					let width = Math.max(localPoint.x - fixedLeft, minWidth);
+					let height = Math.max(localPoint.y - fixedTop, minHeight);
+					if (width / aspectRatio >= height) {
+						height = Math.max(width / aspectRatio, minHeight);
+					} else {
+						width = Math.max(height * aspectRatio, minWidth);
+					}
+					left = fixedLeft;
+					top = fixedTop;
+					right = fixedLeft + width;
+					bottom = fixedTop + height;
+					break;
+				}
+				case 'sw': {
+					const fixedRight = start.width / 2;
+					const fixedTop = -start.height / 2;
+					let width = Math.max(fixedRight - localPoint.x, minWidth);
+					let height = Math.max(localPoint.y - fixedTop, minHeight);
+					if (width / aspectRatio >= height) {
+						height = Math.max(width / aspectRatio, minHeight);
+					} else {
+						width = Math.max(height * aspectRatio, minWidth);
+					}
+					left = fixedRight - width;
+					top = fixedTop;
+					right = fixedRight;
+					bottom = fixedTop + height;
+					break;
+				}
+				case 'n': {
+					const fixedBottom = start.height / 2;
+					const height = Math.max(fixedBottom - localPoint.y, minHeight);
+					const width = Math.max(height * aspectRatio, minWidth);
+					const centerX = 0;
+					left = centerX - width / 2;
+					right = centerX + width / 2;
+					top = fixedBottom - height;
+					bottom = fixedBottom;
+					break;
+				}
+				case 's': {
+					const fixedTop = -start.height / 2;
+					const height = Math.max(localPoint.y - fixedTop, minHeight);
+					const width = Math.max(height * aspectRatio, minWidth);
+					const centerX = 0;
+					left = centerX - width / 2;
+					right = centerX + width / 2;
+					top = fixedTop;
+					bottom = fixedTop + height;
+					break;
+				}
+				case 'e': {
+					const fixedLeft = -start.width / 2;
+					const width = Math.max(localPoint.x - fixedLeft, minWidth);
+					const height = Math.max(width / aspectRatio, minHeight);
+					const centerY = 0;
+					left = fixedLeft;
+					right = fixedLeft + width;
+					top = centerY - height / 2;
+					bottom = centerY + height / 2;
+					break;
+				}
+				case 'w': {
+					const fixedRight = start.width / 2;
+					const width = Math.max(fixedRight - localPoint.x, minWidth);
+					const height = Math.max(width / aspectRatio, minHeight);
+					const centerY = 0;
+					left = fixedRight - width;
+					right = fixedRight;
+					top = centerY - height / 2;
+					bottom = centerY + height / 2;
+					break;
+				}
+			}
+		}
+
+		const width = right - left;
+		const height = bottom - top;
+		const localCenter = {
+			x: (left + right) / 2,
+			y: (top + bottom) / 2
 		};
-		const anchor = anchorMap[handle];
-		const dx = Math.abs(pointer.x - anchor.x);
-		const dy = Math.abs(pointer.y - anchor.y);
-		const scale = Math.max(dx / startRect.width, dy / startRect.height, 0.05);
-		const width = startRect.width * scale;
-		const height = startRect.height * scale;
-		const nextBounds = {
-			x: handle === 'nw' || handle === 'sw' ? anchor.x - width : anchor.x,
-			y: handle === 'nw' || handle === 'ne' ? anchor.y - height : anchor.y,
+		const startCenter = getImageCenter(start);
+		const centerOffset = rotateVector(localCenter, start.rotation);
+		const nextCenter = {
+			x: startCenter.x + centerOffset.x,
+			y: startCenter.y + centerOffset.y
+		};
+
+		applyImageBounds({
+			x: nextCenter.x - width / 2,
+			y: nextCenter.y - height / 2,
 			width,
 			height
+		});
+	}
+
+	function rotateImageFromHandle(point: Point) {
+		if (!image || !imageStartTransform) return;
+		const center = getImageCenter(imageStartTransform);
+		const angle = Math.atan2(point.y - center.y, point.x - center.x) * (180 / Math.PI);
+		image = {
+			...image,
+			rotation: normalizeDegrees(imageStartTransform.rotation + (angle - imageRotationStartAngle))
 		};
-		applyImageBounds(nextBounds);
+		applyImageStateToRaster();
+		drawObjectSelectionOverlay();
 	}
 
 	function fitImageToCanvas() {
@@ -1609,24 +1969,32 @@
 		);
 		const width = imageNaturalSize.width * scale;
 		const height = imageNaturalSize.height * scale;
-		applyImageBounds({
+		image = {
+			...image,
 			x: paper.view.center.x - width / 2,
 			y: paper.view.center.y - height / 2,
 			width,
-			height
-		});
+			height,
+			rotation: 0
+		};
+		applyImageStateToRaster();
+		drawObjectSelectionOverlay();
 	}
 
 	function resetImageTransform() {
 		if (!image || !paper || !imageNaturalSize) return;
 		const width = imageNaturalSize.width;
 		const height = imageNaturalSize.height;
-		applyImageBounds({
+		image = {
+			...image,
 			x: paper.view.center.x - width / 2,
 			y: paper.view.center.y - height / 2,
 			width,
-			height
-		});
+			height,
+			rotation: 0
+		};
+		applyImageStateToRaster();
+		drawObjectSelectionOverlay();
 	}
 
 	function fitSelectedImageToCanvas() {
@@ -1741,6 +2109,7 @@
 		tool.onMouseDown = (event: PaperMouseEvent) => {
 			if (!paper) return;
 			const point = toPlainPoint(event.point);
+			hoverCanvasCursor = null;
 			const handle = activeTool === 'pan' ? hitCalibrationHandle(point) : null;
 
 			if (handle) {
@@ -1768,9 +2137,20 @@
 				if (target?.kind === 'image-handle') {
 					beginPendingEditHistory();
 					activeImageHandle = target.imageHandle;
-					imageStartBounds = image
-						? { x: image.x, y: image.y, width: image.width, height: image.height }
+					imageStartTransform = image
+						? {
+								x: image.x,
+								y: image.y,
+								width: image.width,
+								height: image.height,
+								rotation: image.rotation
+							}
 						: null;
+					if (target.imageHandle === 'rotate' && imageStartTransform) {
+						const center = getImageCenter(imageStartTransform);
+						imageRotationStartAngle =
+							Math.atan2(point.y - center.y, point.x - center.x) * (180 / Math.PI);
+					}
 					return;
 				}
 
@@ -1818,6 +2198,7 @@
 
 		tool.onMouseDrag = (event: PaperMouseEvent) => {
 			if (!paper) return;
+			hoverCanvasCursor = null;
 			if (activeHandle === 'origin') {
 				updateOriginHandle(toPlainPoint(event.point));
 				return;
@@ -1872,7 +2253,15 @@
 					moveImageBy({ x: event.delta.x, y: event.delta.y });
 					return;
 				}
-				resizeImageFromHandle(activeImageHandle, toPlainPoint(event.point));
+				if (activeImageHandle === 'rotate') {
+					rotateImageFromHandle(toPlainPoint(event.point));
+					return;
+				}
+				resizeImageFromHandle(
+					activeImageHandle,
+					toPlainPoint(event.point),
+					!!event.modifiers.shift
+				);
 				return;
 			}
 			if (activeTool === 'brush' && activePath) {
@@ -1930,11 +2319,18 @@
 			}
 			activeCurveHandle = null;
 			activeImageHandle = null;
-			imageStartBounds = null;
+			imageStartTransform = null;
 			activeHandle = null;
 			document.body.classList.remove('cursor-pan-tool');
 			drawCalibration();
 			pointerStart = null;
+			if (paper) {
+				updateCanvasHoverCursor(toPlainPoint(paper.view.center));
+			}
+		};
+
+		tool.onMouseMove = (event: PaperMouseEvent) => {
+			updateCanvasHoverCursor(toPlainPoint(event.point));
 		};
 
 		canvasReady = true;

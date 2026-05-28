@@ -52,14 +52,14 @@ Generated or environment-specific folders such as `.svelte-kit`, `.vercel`, `.pn
 
 The main screen is orchestrated by `src/routes/+page.svelte`, which owns the Paper.js canvas lifecycle and all application state. The UI has been extracted into eight Svelte components under `src/components/`:
 
-- `Header.svelte` — app title bar, image upload, and copy-export button.
-- `Toolbar.svelte` — brush/pan tool switching and undo/redo buttons.
+- `Header.svelte` — app title bar and image upload button.
+- `Toolbar.svelte` — brush/pan tool switching and undo/redo buttons (pan label: "移动").
 - `BrushSettings.svelte` — brush color, width, simplify tolerance, smoothing, and all snap controls (uses `$bindable` for two-way state binding).
 - `CalibrationSettings.svelte` — real unit length input and grid display toggle.
 - `CanvasWorkspace.svelte` — canvas element with status overlay and reset-view button (exposes `canvas` and `hostElement` refs via `$bindable`).
 - `ObjectPropertiesPanel.svelte` — shared property editor for selected images and curves.
 - `CurveListPanel.svelte` — curve list with multi-selection, delete, clear, and select-all actions.
-- `ExportPanel.svelte` — export format selector, precision, code output textarea, and download button.
+- `ExportPanel.svelte` — export format selector, precision, code output textarea, copy and download buttons.
 
 All components receive state via props and communicate back through callback props or `$bindable` two-way bindings. Business logic (coordinate conversion, export formatting) remains in `src/lib/core`.
 
@@ -69,7 +69,7 @@ The current implementation direction is to keep building a unified Paper.js obje
 
 Already implemented for that goal:
 
-- Reference images are selectable objects with move, resize, opacity, lock, fit, and reset-transform actions.
+- Reference images are selectable objects with move, resize (4 corners, pending fix), opacity, lock, fit, and reset-transform actions.
 - Curves are selectable objects on the canvas, not only in the right-side list.
 - A single selected curve exposes editable anchors and Bezier control handles directly on canvas.
 - Multiple selected curves support batch color and stroke-width editing.
@@ -80,6 +80,9 @@ Already implemented for that goal:
 
 Still remaining for that goal:
 
+- Fix image corner resize handles and extend to 8 handles (4 corners + 4 edge midpoints).
+- Add image rotation via top-center drag handle (Figma-style).
+- Add on-canvas lock toggle and opacity control rendered as Paper.js graphics at the image top-right corner.
 - Richer multi-curve editing affordances beyond batch styling and single-curve handle editing.
 - Project save/load for image, curves, and calibration state.
 - A more deliberate responsive pass once the object model settles.
@@ -122,13 +125,16 @@ Already present in some form:
 - Closed-path snap preview indicator while drawing.
 - Grid-point snapping to calibrated integer coordinate intersections.
 - Local persistence for brush post-processing and snap settings.
-- Reference image object selection, movement, corner-handle resizing, opacity control, locking, fit-to-canvas, and reset-transform actions.
+- Reference image object selection, movement, corner-handle resizing (4 corners, pending fix to 8 handles), opacity control, locking, fit-to-canvas, and reset-transform actions.
 - Canvas click selection for curve objects.
 - Single-curve anchor and control-handle editing on canvas.
 - Batch stroke-color and stroke-width editing for multiple selected curves.
 
 Still incomplete or not yet implemented:
 
+- Image resize handles fix: extend from 4 corners to 8 handles (4 corners + 4 edge midpoints), fix non-functional corner resize.
+- Image rotation: drag handle above image for rotation around center.
+- On-canvas image controls: lock toggle and opacity indicator as Paper.js graphics on the selection overlay.
 - Shared stores in `src/stores.ts`.
 - Web Worker processing under `src/lib/workers`.
 - API routes under `src/routes/api`.
@@ -194,6 +200,8 @@ type CoordinateSystem = {
 	unitRealLength: number;
 };
 ```
+
+`CanvasImage` currently has: `id, name, src, x, y, width, height, opacity, locked`. A `rotation: number` field (degrees) is planned.
 
 ## Dependency Policy
 
