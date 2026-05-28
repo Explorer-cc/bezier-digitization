@@ -48,6 +48,7 @@
 	let project: PaperProject | null = null;
 	let activePath: PaperPath | null = null;
 	let referenceRaster: PaperRaster | null = null;
+	let snapPreviewCircle: PaperPath | null = null;
 	let canvasResizeObserver: ResizeObserver | null = null;
 	let canvasResizeFrame = 0;
 	let pointerStart: Point | null = null;
@@ -246,6 +247,7 @@
 	function setTool(mode: ToolMode) {
 		activeTool = mode;
 		activeHandle = null;
+		clearClosedPathSnapPreview();
 		document.body.classList.remove('cursor-pan-tool');
 		updateStatusForTool();
 	}
@@ -274,23 +276,69 @@
 		const curvesLayer = getOrCreateLayer('curves');
 		const calibrationLayer = getOrCreateLayer('calibration');
 		const referenceLayer = getOrCreateLayer('reference');
-		if (!curvesLayer || !calibrationLayer || !referenceLayer) return;
+		const previewLayer = getOrCreateLayer('preview');
+		if (!curvesLayer || !calibrationLayer || !referenceLayer || !previewLayer) return;
 
 		curvesLayer.sendToBack();
 		calibrationLayer.insertAbove(curvesLayer);
-		referenceLayer.bringToFront();
+		referenceLayer.insertAbove(calibrationLayer);
+		previewLayer.bringToFront();
+	}
+
+	function getClosedPathSnapState(path: PaperPath) {
+		if (!snapClosedPaths || path.segments.length < 3) {
+			return { eligible: false, withinSnapRange: false, snapRadius: 0, start: null, end: null };
+		}
+		const first = path.firstSegment;
+		const last = path.lastSegment;
+		if (!first || !last) {
+			return { eligible: false, withinSnapRange: false, snapRadius: 0, start: null, end: null };
+		}
+
+		const snapRadius = closedPathSnapDistance / (paper?.view.zoom ?? 1);
+		const withinSnapRange = first.point.getDistance(last.point) <= snapRadius;
+		return {
+			eligible: true,
+			withinSnapRange,
+			snapRadius,
+			start: first.point,
+			end: last.point
+		};
+	}
+
+	function clearClosedPathSnapPreview() {
+		snapPreviewCircle?.remove();
+		snapPreviewCircle = null;
+	}
+
+	function updateClosedPathSnapPreview(path: PaperPath) {
+		if (!paper) return;
+		const state = getClosedPathSnapState(path);
+		if (!state.eligible || !state.withinSnapRange || !state.end) {
+			clearClosedPathSnapPreview();
+			return;
+		}
+
+		const previewLayer = getOrCreateLayer('preview');
+		if (!previewLayer) return;
+		clearClosedPathSnapPreview();
+		snapPreviewCircle = new paper.Path.Circle({
+			center: state.end,
+			radius: state.snapRadius,
+			parent: previewLayer,
+			strokeColor: new paper.Color(0.52, 0.82, 0.58, 0.95),
+			fillColor: new paper.Color(0.74, 0.94, 0.78, 0.18),
+			strokeWidth: 2 / paper.view.zoom
+		});
+		snapPreviewCircle.locked = true;
+		syncLayerOrder();
 	}
 
 	function closePathIfSnapped(path: PaperPath) {
-		if (!snapClosedPaths || path.segments.length < 3) return false;
-		const first = path.firstSegment;
-		const last = path.lastSegment;
-		if (!first || !last) return false;
+		const state = getClosedPathSnapState(path);
+		if (!state.eligible || !state.withinSnapRange || !state.start || !state.end) return false;
 
-		const snapDistance = closedPathSnapDistance / (paper?.view.zoom ?? 1);
-		if (first.point.getDistance(last.point) > snapDistance) return false;
-
-		last.point = first.point.clone();
+		path.lastSegment.point = state.start.clone();
 		path.closed = true;
 		return true;
 	}
@@ -814,6 +862,7 @@
 			}
 
 			if (activeTool === 'brush') {
+				clearClosedPathSnapPreview();
 				activePath = new paper.Path({
 					strokeColor: stroke,
 					strokeWidth,
@@ -843,6 +892,7 @@
 			}
 			if (activeTool === 'brush' && activePath) {
 				activePath.add(event.point);
+				updateClosedPathSnapPreview(activePath);
 			}
 			if (activeTool === 'pan' && pointerStart) {
 				paper.view.center = paper.view.center.subtract(event.delta);
@@ -852,6 +902,7 @@
 
 		tool.onMouseUp = () => {
 			if (activeTool === 'brush' && activePath) {
+				clearClosedPathSnapPreview();
 				addCurveFromPath(activePath);
 				activePath = null;
 			}
@@ -881,6 +932,7 @@
 		if (image?.src) {
 			URL.revokeObjectURL(image.src);
 		}
+		clearClosedPathSnapPreview();
 		canvasResizeObserver?.disconnect();
 		tool?.remove();
 		project?.remove();
@@ -891,8 +943,8 @@
 	<title>Bezier Curve Digitizer</title>
 </svelte:head>
 
-<main class="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-950">
-	<header class="flex h-14 items-center justify-between border-b border-zinc-300 bg-white px-4">
+<main class="h-screen overflow-hidden bg-zinc-100 text-zinc-950">
+	<header class="flex h-14 items-center justify-between border-b border-zinc-300 bg-white px-4 shrink-0">
 		<div>
 			<h1 class="text-base font-semibold">Bezier Curve Digitizer</h1>
 			<p class="text-xs text-zinc-500">图片描线、坐标校准、多格式 Bezier 路径导出</p>
@@ -924,7 +976,7 @@
 		</div>
 	</header>
 
-	<div class="grid min-h-0 flex-1" style:grid-template-columns={workspaceGridColumns}>
+	<div class="grid h-[calc(100vh-3.5rem)] min-h-0" style:grid-template-columns={workspaceGridColumns}>
 		<aside
 			class={`overflow-y-auto border-r border-zinc-300 bg-white p-4 ${
 				leftPanelCollapsed ? 'pointer-events-none invisible' : ''
@@ -968,7 +1020,7 @@
 						title="Ctrl+Y"
 					>
 						<Redo2 size={16} />
-						恢复上次路径
+						恢复
 					</button>
 				</div>
 			</section>
@@ -1017,23 +1069,6 @@
 					<input bind:checked={showGrid} type="checkbox" onchange={drawCalibration} />
 					显示坐标网格
 				</label>
-				<p class="text-xs leading-5 text-zinc-500">
-					切换到“平移”工具后，可拖动黑色原点或蓝色单位点。单位点只支持水平拖动，坐标轴方向固定水平和垂直。
-				</p>
-				<div class="rounded border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-600">
-					<div>
-						原点 canvas: {Math.round(coordinateSystem.originCanvas.x)}, {Math.round(
-							coordinateSystem.originCanvas.y
-						)}
-					</div>
-					<div>原点坐标: {originCoord.x}, {originCoord.y}</div>
-					<div>单位像素: {coordinateSystem.unitCanvasLength.toFixed(1)}</div>
-					<div>
-						单位点: {Math.round(coordinateSystem.xAxisPoint.x)}, {Math.round(
-							coordinateSystem.xAxisPoint.y
-						)}
-					</div>
-				</div>
 			</section>
 
 			<section class="mt-6 space-y-3">
@@ -1063,7 +1098,7 @@
 						</button>
 					</div>
 				{:else}
-					<p class="text-sm text-zinc-500">尚未上传参考图。</p>
+					<p class="text-sm text-zinc-500">尚未上传参考图</p>
 				{/if}
 			</section>
 		</aside>
@@ -1225,7 +1260,7 @@
 								</button>
 							{/each}
 						{:else}
-							<p class="text-sm text-zinc-500">暂无曲线。</p>
+							<p class="text-sm text-zinc-500">暂无曲线</p>
 						{/if}
 					</div>
 				</div>
