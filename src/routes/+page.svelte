@@ -635,7 +635,11 @@
 		if (!paper) return;
 		syncCanvasSize();
 		paper.view.zoom = 1;
-		paper.view.center = new paper.Point(canvas.width / 2, canvas.height / 2);
+		paper.view.center = new paper.Point(
+			coordinateSystem.originCanvas.x,
+			coordinateSystem.originCanvas.y
+		);
+		drawCalibration();
 	}
 
 	function handleFileChange(event: Event) {
