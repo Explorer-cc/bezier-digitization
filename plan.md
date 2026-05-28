@@ -45,12 +45,13 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Paper.js canvas initialized in the browser.
 - [x] Image upload implemented for local image files.
 - [x] Reference image displayed on the canvas.
+- [x] Reference image moved to a dedicated top layer so it stays visible for tracing and point picking.
 - [x] Reference image opacity control implemented.
 - [x] Basic reference image lock/unlock UI added.
 - [x] Canvas zoom implemented with mouse wheel.
 - [x] Canvas pan mode implemented.
 - [x] Freehand brush drawing implemented.
-- [x] Drawn paths are simplified and smoothed through Paper.js.
+- [x] Drawn paths can be simplified and smoothed through explicit brush settings.
 - [x] Cubic Bezier segment data extracted from Paper.js paths.
 - [x] Extracted curves stored as internal `CurvePath` objects.
 - [x] Curve list implemented.
@@ -99,14 +100,24 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Closed-path snapping toggle added for brush drawing.
 - [x] Closed-path snapping threshold slider added in the left panel.
 - [x] Closed-path snapping now closes by endpoint snap only and does not resmooth the whole path.
+- [x] Closed-path snap preview circle implemented on the live brush endpoint.
 - [x] Closed curves are exported distinctly in all formats.
+- [x] Brush post-processing controls added:
+  - simplify tolerance slider
+  - smoothing toggle
+- [x] Brush post-processing settings persisted in `localStorage`.
 - [x] Right-side vertical layout improved:
   - top and bottom drag handles move the fixed-height export-settings block
-  - export-settings block height is fixed
+  - export-settings block height adapts to smaller viewport heights
   - code-output block fills remaining space
 - [x] Left panel default width reduced.
 - [x] Brush width slider narrowed to `1px` to `8px`.
 - [x] Reset view now centers the calibrated origin in the viewport.
+- [x] Reset-view button moved away from the bottom edge to reduce small-window clipping risk.
+- [x] Small-viewport constraints tightened:
+  - left panel `min-h-0`
+  - canvas section `min-h-0` and `overflow-hidden`
+  - right panel heights clamped against available height
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
 
 ## Verification Status
@@ -130,7 +141,7 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] i18n files are not wired into the UI yet.
 - [ ] Manual LaTeX/TikZ compile verification still needs to be done with exported output.
 - [ ] Closed-path snapping uses a simple endpoint-distance heuristic only.
-- [ ] Closed-path snapping currently has no pre-trigger preview on the canvas.
+- [ ] Very small viewport layouts still need a dedicated responsive pass.
 
 ## Next TodoList
 
@@ -164,9 +175,10 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
   - export settings
 - [ ] Add local persistence for lightweight user preferences:
   - export precision
-  - wrapper option
   - brush color
   - brush width
+  - simplify tolerance
+  - smoothing toggle
 
 ### 3. Improve Reference Image Handling
 
@@ -186,12 +198,7 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Add curve color and stroke width editing after creation.
 - [x] Add undo/redo for drawing.
 - [ ] Broaden undo/redo to cover deletion, clear, calibration, and image changes.
-- [ ] Add closed-path snap preview when the brush endpoint is within the configured snap threshold.
-  - show a pale-green circle centered on the current endpoint
-  - use the left-panel threshold as the preview radius
-  - only show while the brush is active and snapping is enabled
-  - hide immediately when the endpoint exits the threshold
-  - verify that the preview radius tracks zoom consistently
+- [x] Add closed-path snap preview when the brush endpoint is within the configured snap threshold.
 
 ### 5. Improve Coordinate Calibration
 
@@ -202,7 +209,14 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [x] Add grid overlay based on calibrated coordinates.
 - [ ] Add snapping to origin, axis, and grid.
 
-### 6. Improve Export
+### 6. Improve Responsive Layout
+
+- [ ] Do a dedicated small-viewport pass for header and side panels.
+- [ ] Compress fixed control heights where possible in short windows.
+- [ ] Remove remaining assumptions that important actions can live on the bottom edge.
+- [ ] Replace piecemeal height clamps with a clearer responsive strategy for the right panel.
+
+### 7. Improve Export
 
 - [x] Allow exporting selected curves only; when nothing is selected, output is empty.
 - [ ] Add explicit export-mode toggle for selected/all if needed.
@@ -219,7 +233,7 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Test exported LuaDraw in a minimal LuaLaTeX document.
 - [ ] Test exported CeTZ in a minimal Typst document.
 
-### 7. Add i18n Foundation
+### 8. Add i18n Foundation
 
 - [ ] Create `src/lib/i18n/index.ts`.
 - [ ] Create `src/lib/i18n/locales/zh.json`.
@@ -227,7 +241,7 @@ The current implementation is intentionally compact: the MVP UI is concentrated 
 - [ ] Replace hard-coded UI text with translation keys.
 - [ ] Default to Chinese UI.
 
-### 8. Add More Tests
+### 9. Add More Tests
 
 - [ ] Add tests for unit calibration edge cases.
 - [ ] Add tests for rotated coordinate basis.

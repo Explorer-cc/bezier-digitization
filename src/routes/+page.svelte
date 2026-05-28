@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { canvasToCoordinate, defaultCoordinateSystem, getBasis } from '$lib/core/coordinate';
+	import {
+		canvasToCoordinate,
+		coordinateToCanvas,
+		defaultCoordinateSystem,
+		getBasis
+	} from '$lib/core/coordinate';
 	import { exportCurves } from '$lib/core/exporter';
 	import type {
 		CanvasImage,
@@ -72,6 +77,7 @@
 	let strokeWidth = $state(2);
 	let simplifyTolerance = $state(2);
 	let smoothDrawnPath = $state(true);
+	let snapToGridPoints = $state(false);
 	let snapClosedPaths = $state(false);
 	let closedPathSnapDistance = $state(18);
 	let showGrid = $state(true);
@@ -86,6 +92,7 @@
 	let rightSectionStartHeight = 0;
 	let canvasReady = $state(false);
 	let status = $state('选择图片或直接用画笔描曲线');
+	let snapPreviewStatus = $state('');
 
 	const tools: Array<{ id: ToolMode; label: string; icon: typeof Pencil }> = [
 		{ id: 'brush', label: '画笔', icon: Pencil },
@@ -121,6 +128,7 @@
 		`${leftPanelCollapsed ? 0 : leftPanelWidth}px 28px 6px minmax(0, 1fr) 6px 28px ${rightPanelCollapsed ? 0 : rightPanelWidth}px`
 	);
 	let canvasCursorClass = $derived(activeTool === 'pan' ? 'cursor-pan-tool' : 'cursor-crosshair');
+	let overlayStatus = $derived(snapPreviewStatus ? `${status} | ${snapPreviewStatus}` : status);
 
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -191,7 +199,9 @@
 			'tikz-curve-digitizer:brush-settings',
 			JSON.stringify({
 				simplifyTolerance,
-				smoothDrawnPath
+				smoothDrawnPath,
+				snapToGridPoints,
+				closedPathSnapDistance
 			})
 		);
 	}
@@ -205,9 +215,17 @@
 			const parsed = JSON.parse(raw) as {
 				simplifyTolerance?: number;
 				smoothDrawnPath?: boolean;
+				snapToGridPoints?: boolean;
+				closedPathSnapDistance?: number;
 			};
 			simplifyTolerance = clamp(parsed.simplifyTolerance ?? simplifyTolerance, 0, 5);
 			smoothDrawnPath = parsed.smoothDrawnPath ?? smoothDrawnPath;
+			snapToGridPoints = parsed.snapToGridPoints ?? snapToGridPoints;
+			closedPathSnapDistance = clamp(
+				parsed.closedPathSnapDistance ?? closedPathSnapDistance,
+				5,
+				50
+			);
 		} catch {
 			localStorage.removeItem('tikz-curve-digitizer:brush-settings');
 		}
@@ -318,6 +336,10 @@
 		return Math.hypot(a.x - b.x, a.y - b.y);
 	}
 
+	function getSnapRadius() {
+		return closedPathSnapDistance / (paper?.view.zoom ?? 1);
+	}
+
 	function getOrCreateLayer(name: string) {
 		if (!paper || !project) return null;
 		const existing = project.layers.find((item: PaperLayer) => item.name === name);
@@ -350,7 +372,7 @@
 			return { eligible: false, withinSnapRange: false, snapRadius: 0, start: null, end: null };
 		}
 
-		const snapRadius = closedPathSnapDistance / (paper?.view.zoom ?? 1);
+		const snapRadius = getSnapRadius();
 		const withinSnapRange = first.point.getDistance(last.point) <= snapRadius;
 		return {
 			eligible: true,
@@ -361,25 +383,57 @@
 		};
 	}
 
+	function getGridPointSnapState(point: Point) {
+		if (!snapToGridPoints) {
+			return {
+				eligible: false,
+				withinSnapRange: false,
+				snapRadius: 0,
+				targetPoint: null,
+				gridCoordinate: null
+			};
+		}
+
+		const gridCoordinate = canvasToCoordinate(point, coordinateSystem);
+		const roundedCoordinate = {
+			x: Math.round(gridCoordinate.x),
+			y: Math.round(gridCoordinate.y)
+		};
+		const targetPoint = coordinateToCanvas(roundedCoordinate, coordinateSystem);
+		const snapRadius = getSnapRadius();
+		const withinSnapRange = distanceBetween(point, targetPoint) <= snapRadius;
+		return {
+			eligible: true,
+			withinSnapRange,
+			snapRadius,
+			targetPoint,
+			gridCoordinate: roundedCoordinate
+		};
+	}
+
+	function getSnappedBrushPoint(point: Point) {
+		const gridSnap = getGridPointSnapState(point);
+		if (gridSnap.eligible && gridSnap.withinSnapRange && gridSnap.targetPoint) {
+			return gridSnap.targetPoint;
+		}
+		return point;
+	}
+
 	function clearClosedPathSnapPreview() {
 		snapPreviewCircle?.remove();
 		snapPreviewCircle = null;
+		snapPreviewStatus = '';
 	}
 
-	function updateClosedPathSnapPreview(path: PaperPath) {
+	function updateSnapPreviewCircle(center: PaperPoint | Point, radius: number) {
 		if (!paper) return;
-		const state = getClosedPathSnapState(path);
-		if (!state.eligible || !state.withinSnapRange || !state.end) {
-			clearClosedPathSnapPreview();
-			return;
-		}
-
 		const previewLayer = getOrCreateLayer('preview');
 		if (!previewLayer) return;
 		clearClosedPathSnapPreview();
+		const previewCenter = center instanceof paper.Point ? center : new paper.Point(center.x, center.y);
 		snapPreviewCircle = new paper.Path.Circle({
-			center: state.end,
-			radius: state.snapRadius,
+			center: previewCenter,
+			radius,
 			parent: previewLayer,
 			strokeColor: new paper.Color(0.52, 0.82, 0.58, 0.95),
 			fillColor: new paper.Color(0.74, 0.94, 0.78, 0.18),
@@ -387,6 +441,29 @@
 		});
 		snapPreviewCircle.locked = true;
 		syncLayerOrder();
+	}
+
+	function updateClosedPathSnapPreview(path: PaperPath, rawPoint: Point) {
+		const gridSnap = getGridPointSnapState(rawPoint);
+		if (
+			gridSnap.eligible &&
+			gridSnap.withinSnapRange &&
+			gridSnap.targetPoint &&
+			gridSnap.gridCoordinate
+		) {
+			snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+			updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
+			return;
+		}
+
+		const closedSnap = getClosedPathSnapState(path);
+		if (!closedSnap.eligible || !closedSnap.withinSnapRange || !closedSnap.end) {
+			clearClosedPathSnapPreview();
+			return;
+		}
+
+		snapPreviewStatus = '';
+		updateSnapPreviewCircle(closedSnap.end, closedSnap.snapRadius);
 	}
 
 	function closePathIfSnapped(path: PaperPath) {
@@ -931,7 +1008,9 @@
 					strokeJoin: 'round',
 					parent: getOrCreateLayer('curves') ?? undefined
 				});
-				activePath.add(event.point);
+				const snappedPoint = getSnappedBrushPoint(point);
+				activePath.add(new paper.Point(snappedPoint.x, snappedPoint.y));
+				updateClosedPathSnapPreview(activePath, point);
 				return;
 			}
 
@@ -952,8 +1031,10 @@
 				return;
 			}
 			if (activeTool === 'brush' && activePath) {
-				activePath.add(event.point);
-				updateClosedPathSnapPreview(activePath);
+				const rawPoint = toPlainPoint(event.point);
+				const snappedPoint = getSnappedBrushPoint(rawPoint);
+				activePath.add(new paper.Point(snappedPoint.x, snappedPoint.y));
+				updateClosedPathSnapPreview(activePath, rawPoint);
 			}
 			if (activeTool === 'pan' && pointerStart) {
 				paper.view.center = paper.view.center.subtract(event.delta);
@@ -1112,6 +1193,10 @@
 					平滑路径
 				</label>
 				<label class="flex items-center gap-2 text-sm">
+					<input bind:checked={snapToGridPoints} type="checkbox" />
+					开启格点吸附
+				</label>
+				<label class="flex items-center gap-2 text-sm">
 					<input bind:checked={snapClosedPaths} type="checkbox" />
 					开启闭合路径吸附
 				</label>
@@ -1120,9 +1205,9 @@
 					<input
 						bind:value={closedPathSnapDistance}
 						class="mt-1 w-full"
-						disabled={!snapClosedPaths}
-						max="60"
-						min="8"
+						disabled={!snapClosedPaths && !snapToGridPoints}
+						max="50"
+						min="5"
 						step="1"
 						type="range"
 					/>
@@ -1209,7 +1294,7 @@
 			<div
 				class="absolute top-3 left-3 z-10 rounded border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-600 shadow-sm"
 			>
-				{status}
+				{overlayStatus}
 			</div>
 			<button
 				class="absolute top-3 right-3 z-10 inline-flex h-8 items-center rounded border border-zinc-300 bg-white px-2 text-xs shadow-sm"

@@ -43,9 +43,9 @@ Generated or environment-specific folders such as `.svelte-kit`, `.vercel`, `.pn
 
 The main screen is currently implemented in `src/routes/+page.svelte`. It includes:
 
-- Image upload through a hidden file input and Paper.js `Raster`.
+- Image upload through a hidden file input and a dedicated top-layer Paper.js `Raster`.
 - A Paper.js canvas with zoom via mouse wheel and pan mode.
-- Freehand brush drawing converted into simplified and smoothed Paper.js paths.
+- Freehand brush drawing with explicit simplify-tolerance and smoothing controls.
 - Conversion of drawn paths into internal cubic Bezier segment data.
 - Curve list with multi-selection, selection highlighting, delete, and clear actions.
 - Undo and redo for drawn curves, including keyboard shortcuts.
@@ -55,8 +55,10 @@ The main screen is currently implemented in `src/routes/+page.svelte`. It includ
 - Code export preview, copy, and download.
 - Export precision and export-format switching for TikZ, LuaDraw, and CeTZ.
 - Closed-path snapping toggle and configurable snap threshold.
+- Pale-green closed-path snap preview circle during active brush drawing.
+- Brush post-processing settings persisted in `localStorage`.
 - Resizable and collapsible left/right panels persisted in `localStorage`.
-- Fixed-height export-settings panel with draggable separators above and below it.
+- Adaptive right-side vertical layout with draggable separators and height clamping for smaller viewports.
 
 The current UI is functional but still monolithic. When adding substantial features, prefer extracting UI-only pieces into `src/components` and keeping business logic in `src/lib/core`.
 
@@ -81,9 +83,9 @@ Already present in some form:
 
 - Browser image upload for common image formats.
 - Canvas workspace with pan and zoom.
-- Reference image display with opacity control.
+- Reference image display with opacity control and top-layer rendering for tracing and point picking.
 - Freehand vector brush backed by Paper.js path data.
-- Paper.js smoothing and simplification.
+- Optional Paper.js smoothing and configurable simplification.
 - Internal cubic Bezier segment data.
 - Coordinate origin selection.
 - Horizontal unit length calibration.
@@ -94,6 +96,8 @@ Already present in some form:
 - Multi-selected-curve export behavior.
 - Undo/redo for drawing history.
 - Closed-path snapping by endpoint proximity.
+- Closed-path snap preview indicator while drawing.
+- Local persistence for brush post-processing settings.
 
 Still incomplete or not yet implemented:
 
@@ -105,8 +109,8 @@ Still incomplete or not yet implemented:
 - Editable Bezier handles after stroke creation.
 - Reference image move/scale controls. The `locked` state exists in UI data but does not yet drive image interaction.
 - Internationalized locale files despite `svelte-i18n` being installed.
-- Closed-path snap preview indicator while drawing.
-  The intended behavior is a pale-green circular hint shown near the live brush endpoint whenever closed-path snapping is enabled and the endpoint is within the configured snap threshold of the start point.
+- Full project save/load.
+- Dedicated responsive cleanup for very short viewport heights.
 
 Defer until the core workflow is stable:
 
@@ -127,6 +131,8 @@ Defer until the core workflow is stable:
 - Put expensive browser-side processing in Web Workers when it becomes heavy enough to affect UI responsiveness.
 - Put protected API key usage and server-only integration code under SvelteKit API routes.
 - Snap-preview overlays for in-progress drawing should stay transient in the Paper.js scene and must not mutate persisted curve data before commit.
+- The snap-preview circle must use the same screen-pixel threshold mapped into project coordinates as the actual closed-path snapping logic.
+- Reference images should remain on their own Paper.js layer and stay visually above curves and calibration graphics.
 
 Core geometry types currently include:
 
