@@ -22,6 +22,7 @@
 		Lock,
 		Pencil,
 		Trash2,
+		Undo2,
 		Unlock
 	} from '@lucide/svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -39,6 +40,7 @@
 	let paper: PaperScope | null = null;
 	let canvas: HTMLCanvasElement;
 	let canvasHost: HTMLElement;
+	let rightPanelHost: HTMLElement;
 	let fileInput: HTMLInputElement;
 	let tool: PaperTool | null = null;
 	let project: PaperProject | null = null;
@@ -52,7 +54,7 @@
 	let activeTool = $state<ToolMode>('brush');
 	let image = $state<CanvasImage | null>(null);
 	let curves = $state<CurvePath[]>([]);
-	let selectedCurveId = $state('');
+	let selectedCurveIds = $state<string[]>([]);
 	let coordinateSystem = $state<CoordinateSystem>({
 		...defaultCoordinateSystem,
 		originCanvas: { x: 360, y: 300 },
@@ -68,7 +70,11 @@
 	let rightPanelWidth = $state(360);
 	let leftPanelCollapsed = $state(false);
 	let rightPanelCollapsed = $state(false);
+	let rightCurvesPanelHeight = $state(220);
 	let resizingPanel = $state<'left' | 'right' | null>(null);
+	let resizingRightSection = $state(false);
+	let rightSectionResizeStartY = 0;
+	let rightSectionStartHeight = 0;
 	let canvasReady = $state(false);
 	let status = $state('选择图片或直接用画笔描曲线');
 
@@ -76,12 +82,12 @@
 		{ id: 'brush', label: '画笔', icon: Pencil },
 		{ id: 'pan', label: '平移', icon: Hand }
 	];
+	const rightSettingsPanelHeight = 150;
 
-	let selectedCurve = $derived(
-		curves.find((curve) => curve.id === selectedCurveId) ?? curves.at(-1) ?? null
-	);
+	let selectedCurveIdSet = $derived(new Set(selectedCurveIds));
+	let selectedCurves = $derived(curves.filter((curve) => selectedCurveIdSet.has(curve.id)));
 	let exportCode = $derived(
-		exportCurvesToTikz(selectedCurve ? [selectedCurve] : curves, coordinateSystem, {
+		exportCurvesToTikz(selectedCurves, coordinateSystem, {
 			precision,
 			includeWrapper
 		})
@@ -90,13 +96,7 @@
 	let workspaceGridColumns = $derived(
 		`${leftPanelCollapsed ? 0 : leftPanelWidth}px 28px 6px minmax(0, 1fr) 6px 28px ${rightPanelCollapsed ? 0 : rightPanelWidth}px`
 	);
-	let canvasCursorClass = $derived(
-		activeTool === 'pan'
-			? activeHandle || pointerStart
-				? 'cursor-grabbing'
-				: 'cursor-grab'
-			: 'cursor-crosshair'
-	);
+	let canvasCursorClass = $derived(activeTool === 'pan' ? 'cursor-pan-tool' : 'cursor-crosshair');
 
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -133,6 +133,31 @@
 			rightPanelCollapsed = parsed.rightCollapsed ?? rightPanelCollapsed;
 		} catch {
 			localStorage.removeItem('tikz-curve-digitizer:panel-layout');
+		}
+	}
+
+	function persistRightPanelLayout() {
+		if (!browser) return;
+		localStorage.setItem(
+			'tikz-curve-digitizer:right-panel-layout',
+			JSON.stringify({
+				curvesHeight: rightCurvesPanelHeight
+			})
+		);
+	}
+
+	function loadRightPanelLayout() {
+		if (!browser) return;
+		const raw = localStorage.getItem('tikz-curve-digitizer:right-panel-layout');
+		if (!raw) return;
+
+		try {
+			const parsed = JSON.parse(raw) as {
+				curvesHeight?: number;
+			};
+			rightCurvesPanelHeight = clamp(parsed.curvesHeight ?? rightCurvesPanelHeight, 120, 520);
+		} catch {
+			localStorage.removeItem('tikz-curve-digitizer:right-panel-layout');
 		}
 	}
 
@@ -184,6 +209,7 @@
 	function setTool(mode: ToolMode) {
 		activeTool = mode;
 		activeHandle = null;
+		document.body.classList.remove('cursor-pan-tool');
 		updateStatusForTool();
 	}
 
@@ -267,6 +293,48 @@
 		persistPanelLayout();
 	}
 
+	function startRightSectionResize(event: PointerEvent) {
+		if (rightPanelCollapsed) return;
+		resizingRightSection = true;
+		rightSectionResizeStartY = event.clientY;
+		rightSectionStartHeight = rightCurvesPanelHeight;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		document.body.style.cursor = 'row-resize';
+		document.body.style.userSelect = 'none';
+		window.addEventListener('pointermove', handleRightSectionResize);
+		window.addEventListener('pointerup', stopRightSectionResize);
+		window.addEventListener('pointercancel', stopRightSectionResize);
+	}
+
+	function handleRightSectionResize(event: PointerEvent) {
+		if (!resizingRightSection || !rightPanelHost) return;
+		const availableHeight = rightPanelHost.getBoundingClientRect().height;
+		const minCurvesHeight = 120;
+		const minOutputHeight = 180;
+		const separatorHeight = 16;
+		const maxCurvesHeight = Math.max(
+			minCurvesHeight,
+			availableHeight - rightSettingsPanelHeight - minOutputHeight - separatorHeight
+		);
+
+		rightCurvesPanelHeight = clamp(
+			rightSectionStartHeight + event.clientY - rightSectionResizeStartY,
+			minCurvesHeight,
+			maxCurvesHeight
+		);
+	}
+
+	function stopRightSectionResize() {
+		if (!resizingRightSection) return;
+		resizingRightSection = false;
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		window.removeEventListener('pointermove', handleRightSectionResize);
+		window.removeEventListener('pointerup', stopRightSectionResize);
+		window.removeEventListener('pointercancel', stopRightSectionResize);
+		persistRightPanelLayout();
+	}
+
 	function togglePanel(panel: 'left' | 'right', event: MouseEvent) {
 		event.stopPropagation();
 		if (panel === 'left') {
@@ -314,24 +382,38 @@
 			strokeWidth
 		};
 		curves = [...curves, curve];
-		selectedCurveId = curve.id;
+		selectedCurveIds = [curve.id];
 		path.remove();
 		redrawCurves();
 		status = `已生成 ${segments.length} 段 Bezier 曲线`;
 	}
 
 	function removeSelectedCurve() {
-		if (!selectedCurveId) return;
-		curves = curves.filter((curve) => curve.id !== selectedCurveId);
-		selectedCurveId = curves.at(-1)?.id ?? '';
+		if (!selectedCurveIds.length) return;
+		const idsToRemove = new Set(selectedCurveIds);
+		curves = curves.filter((curve) => !idsToRemove.has(curve.id));
+		selectedCurveIds = curves.at(-1)?.id ? [curves.at(-1)!.id] : [];
 		redrawCurves();
+		status = `已删除 ${idsToRemove.size} 条曲线`;
 	}
 
 	function clearCurves() {
 		curves = [];
-		selectedCurveId = '';
+		selectedCurveIds = [];
 		redrawCurves();
 		status = '已清空曲线';
+	}
+
+	function undoLastCurve() {
+		if (!curves.length) return;
+		const removedCurve = curves.at(-1);
+		curves = curves.slice(0, -1);
+		selectedCurveIds = selectedCurveIds.filter((id) => id !== removedCurve?.id);
+		if (!selectedCurveIds.length && curves.length) {
+			selectedCurveIds = [curves.at(-1)!.id];
+		}
+		redrawCurves();
+		status = removedCurve ? `已撤销：${removedCurve.name}` : '已撤销上次绘制';
 	}
 
 	function drawCalibration() {
@@ -450,9 +532,10 @@
 		layer.removeChildren();
 
 		for (const curve of curves) {
+			const selected = selectedCurveIdSet.has(curve.id);
 			const path = new paper.Path({
-				strokeColor: curve.id === selectedCurveId ? '#2563eb' : curve.stroke,
-				strokeWidth: curve.id === selectedCurveId ? curve.strokeWidth + 1 : curve.strokeWidth,
+				strokeColor: selected ? '#2563eb' : curve.stroke,
+				strokeWidth: selected ? curve.strokeWidth + 1 : curve.strokeWidth,
 				parent: layer
 			});
 
@@ -537,9 +620,23 @@
 		drawCalibration();
 	}
 
-	function selectCurve(id: string) {
-		selectedCurveId = id;
+	function toggleCurveSelection(id: string) {
+		selectedCurveIds = selectedCurveIdSet.has(id)
+			? selectedCurveIds.filter((selectedId) => selectedId !== id)
+			: [...selectedCurveIds, id];
 		redrawCurves();
+	}
+
+	function selectAllCurves() {
+		selectedCurveIds = curves.map((curve) => curve.id);
+		redrawCurves();
+		status = `已选择 ${selectedCurveIds.length} 条曲线`;
+	}
+
+	function clearCurveSelection() {
+		selectedCurveIds = [];
+		redrawCurves();
+		status = '已取消选择曲线';
 	}
 
 	async function copyExport() {
@@ -561,6 +658,7 @@
 
 	onMount(async () => {
 		loadPanelLayout();
+		loadRightPanelLayout();
 		syncCanvasSize();
 		const paperModule = (await import('paper')).default;
 		paper = paperModule;
@@ -578,6 +676,7 @@
 
 			if (handle) {
 				activeHandle = handle;
+				document.body.classList.add('cursor-pan-tool');
 				if (handle === 'origin') updateOriginHandle(point);
 				else updateUnitHandle(point);
 				return;
@@ -596,6 +695,7 @@
 
 			if (activeTool === 'pan') {
 				pointerStart = point;
+				document.body.classList.add('cursor-pan-tool');
 			}
 		};
 
@@ -624,6 +724,7 @@
 				activePath = null;
 			}
 			activeHandle = null;
+			document.body.classList.remove('cursor-pan-tool');
 			drawCalibration();
 			pointerStart = null;
 		};
@@ -634,10 +735,14 @@
 
 	onDestroy(() => {
 		if (browser) {
+			document.body.classList.remove('cursor-pan-tool');
 			cancelAnimationFrame(canvasResizeFrame);
 			window.removeEventListener('pointermove', handlePanelResize);
 			window.removeEventListener('pointerup', stopPanelResize);
 			window.removeEventListener('pointercancel', stopPanelResize);
+			window.removeEventListener('pointermove', handleRightSectionResize);
+			window.removeEventListener('pointerup', stopRightSectionResize);
+			window.removeEventListener('pointercancel', stopRightSectionResize);
 		}
 		canvasResizeObserver?.disconnect();
 		tool?.remove();
@@ -696,8 +801,8 @@
 						<button
 							class={`inline-flex h-10 items-center justify-center gap-2 rounded border text-sm ${
 								activeTool === item.id
-									? 'border-zinc-950 bg-zinc-950 text-white'
-									: 'border-zinc-300 bg-white hover:bg-zinc-50'
+									? 'border-blue-600 bg-blue-50 text-blue-700 shadow-inner'
+									: 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950'
 							}`}
 							onclick={() => setTool(item.id)}
 							type="button"
@@ -707,6 +812,15 @@
 						</button>
 					{/each}
 				</div>
+				<button
+					class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
+					disabled={!curves.length}
+					onclick={undoLastCurve}
+					type="button"
+				>
+					<Undo2 size={16} />
+					撤销上次绘制
+				</button>
 			</section>
 
 			<section class="mt-6 space-y-3">
@@ -868,85 +982,147 @@
 		</div>
 
 		<aside
+			bind:this={rightPanelHost}
 			class={`flex min-h-0 flex-col border-l border-zinc-300 bg-white ${
 				rightPanelCollapsed ? 'pointer-events-none invisible' : ''
 			}`}
 		>
-			<section class="border-b border-zinc-200 p-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-sm font-semibold">曲线</h2>
-					<div class="flex gap-2">
-						<button
-							class="rounded border border-zinc-300 p-2"
-							onclick={removeSelectedCurve}
-							type="button"
-						>
-							<Trash2 size={15} />
-						</button>
-						<button
-							class="rounded border border-zinc-300 px-2 text-xs"
-							onclick={clearCurves}
-							type="button"
-						>
-							清空
-						</button>
-					</div>
-				</div>
-				<div class="mt-3 max-h-36 overflow-y-auto">
-					{#if curves.length}
-						{#each curves as curve (curve.id)}
+			<section
+				class="min-h-0 overflow-hidden border-b border-zinc-200"
+				style:height={`${rightCurvesPanelHeight}px`}
+			>
+				<div class="flex h-full min-h-0 flex-col p-4">
+					<div class="flex items-center justify-between gap-3">
+						<h2 class="text-sm font-semibold">曲线</h2>
+						<div class="flex shrink-0 gap-2">
 							<button
-								class={`mb-2 flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
-									selectedCurveId === curve.id ? 'border-blue-600 bg-blue-50' : 'border-zinc-200'
-								}`}
-								onclick={() => selectCurve(curve.id)}
+								class="rounded border border-zinc-300 px-2 text-xs disabled:cursor-not-allowed disabled:opacity-45"
+								disabled={!curves.length || selectedCurveIds.length === curves.length}
+								onclick={selectAllCurves}
 								type="button"
 							>
-								<span>{curve.name}</span>
-								<span class="text-xs text-zinc-500">{curve.segments.length} 段</span>
+								全选
 							</button>
-						{/each}
-					{:else}
-						<p class="text-sm text-zinc-500">暂无曲线。</p>
-					{/if}
+							<button
+								class="rounded border border-zinc-300 px-2 text-xs disabled:cursor-not-allowed disabled:opacity-45"
+								disabled={!selectedCurveIds.length}
+								onclick={clearCurveSelection}
+								type="button"
+							>
+								全不选
+							</button>
+							<button
+								class="rounded border border-zinc-300 p-2 disabled:cursor-not-allowed disabled:opacity-45"
+								disabled={!selectedCurveIds.length}
+								onclick={removeSelectedCurve}
+								type="button"
+								title="删除已选曲线"
+							>
+								<Trash2 size={15} />
+							</button>
+							<button
+								class="rounded border border-zinc-300 px-2 text-xs"
+								onclick={clearCurves}
+								type="button"
+							>
+								清空
+							</button>
+						</div>
+					</div>
+					<p class="mt-2 text-xs text-zinc-500">
+						{selectedCurves.length ? `已选择 ${selectedCurves.length} 条曲线` : '未选择曲线'}
+					</p>
+					<div class="mt-3 min-h-0 flex-1 overflow-y-auto">
+						{#if curves.length}
+							{#each curves as curve (curve.id)}
+								{@const selected = selectedCurveIdSet.has(curve.id)}
+								<button
+									class={`mb-2 flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm ${
+										selected ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-zinc-200'
+									}`}
+									aria-pressed={selected}
+									onclick={() => toggleCurveSelection(curve.id)}
+									type="button"
+								>
+									<span class="flex min-w-0 items-center gap-2">
+										<span
+											class={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] ${
+												selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-zinc-300'
+											}`}
+											aria-hidden="true"
+										>
+											{selected ? '✓' : ''}
+										</span>
+										<span class="truncate">{curve.name}</span>
+									</span>
+									<span class="shrink-0 text-xs text-zinc-500">{curve.segments.length} 段</span>
+								</button>
+							{/each}
+						{:else}
+							<p class="text-sm text-zinc-500">暂无曲线。</p>
+						{/if}
+					</div>
 				</div>
 			</section>
-
-			<section class="border-b border-zinc-200 p-4">
-				<h2 class="text-sm font-semibold">导出设置</h2>
-				<label class="mt-3 block text-xs text-zinc-600">
-					小数位数
-					<input
-						bind:value={precision}
-						class="mt-1 h-9 w-full rounded border border-zinc-300 px-2 text-sm"
-						max="6"
-						min="0"
-						type="number"
-					/>
-				</label>
-				<label class="mt-3 flex items-center gap-2 text-sm">
-					<input bind:checked={includeWrapper} type="checkbox" />
-					包含 tikzpicture
-				</label>
-			</section>
-
-			<section class="flex min-h-0 flex-1 flex-col p-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-sm font-semibold">TikZ 输出</h2>
-					<button
-						class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
-						onclick={downloadExport}
-						type="button"
-					>
-						<Download size={14} />
-						下载
-					</button>
+			<div
+				role="separator"
+				aria-orientation="horizontal"
+				aria-label="调整曲线区域高度"
+				class={`h-2 shrink-0 cursor-row-resize border-y border-zinc-200 bg-zinc-100 transition-colors hover:bg-blue-200 ${
+					resizingRightSection ? 'bg-blue-300' : ''
+				}`}
+				onpointerdown={startRightSectionResize}
+			></div>
+			<section
+				class="min-h-0 overflow-hidden border-b border-zinc-200"
+				style:height={`${rightSettingsPanelHeight}px`}
+			>
+				<div class="h-full overflow-y-auto p-4">
+					<h2 class="text-sm font-semibold">导出设置</h2>
+					<label class="mt-3 block text-xs text-zinc-600">
+						小数位数
+						<input
+							bind:value={precision}
+							class="mt-1 h-9 w-full rounded border border-zinc-300 px-2 text-sm"
+							max="6"
+							min="0"
+							type="number"
+						/>
+					</label>
+					<label class="mt-3 flex items-center gap-2 text-sm">
+						<input bind:checked={includeWrapper} type="checkbox" />
+						包含 tikzpicture
+					</label>
 				</div>
-				<textarea
-					class="mt-3 min-h-0 flex-1 resize-none rounded border border-zinc-300 bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-100"
-					readonly
-					value={exportCode}
-				></textarea>
+			</section>
+			<div
+				role="separator"
+				aria-orientation="horizontal"
+				aria-label="调整 TikZ 输出区域高度"
+				class={`h-2 shrink-0 cursor-row-resize border-y border-zinc-200 bg-zinc-100 transition-colors hover:bg-blue-200 ${
+					resizingRightSection ? 'bg-blue-300' : ''
+				}`}
+				onpointerdown={startRightSectionResize}
+			></div>
+			<section class="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<div class="flex h-full min-h-0 flex-col p-4">
+					<div class="flex items-center justify-between">
+						<h2 class="text-sm font-semibold">TikZ 输出</h2>
+						<button
+							class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
+							onclick={downloadExport}
+							type="button"
+						>
+							<Download size={14} />
+							下载
+						</button>
+					</div>
+					<textarea
+						class="mt-3 min-h-0 flex-1 resize-none rounded border border-zinc-300 bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-100"
+						readonly
+						value={exportCode}
+					></textarea>
+				</div>
 			</section>
 		</aside>
 	</div>
