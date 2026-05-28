@@ -20,6 +20,7 @@ Already implemented toward that goal:
   - opacity editing (side panel)
   - lock/unlock (side panel)
   - fit-to-canvas and reset-transform actions
+- [x] Selected reference images can be deleted with `Delete` / `Backspace`.
 - [x] Image resize handles now show hover resize cursors, and the rotate handle uses a custom curved-arrow cursor.
 - [x] Holding `Shift` while resizing an image preserves aspect ratio, including for rotated images.
 - [x] Curves behave as selectable canvas objects:
@@ -31,9 +32,12 @@ Already implemented toward that goal:
 - [x] Undo/redo now spans curve creation, curve editing, image editing, and calibration changes.
 - [x] Grid-point snapping applies to curve anchor and control-handle dragging in pan mode, with the same green preview circle and status feedback as brush drawing.
 - [x] Closed-path snapping works during curve anchor dragging: dragging the first or last anchor near the opposite endpoint snaps and auto-closes the curve.
+- [x] Point-by-point tracing mode is implemented for cubic Bezier path construction.
+- [x] Point mode supports grid snapping, double-click completion, and snapping back to the first point to auto-close the path.
 - [x] Component extraction completed with eight UI components under `src/components/`:
   - Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
 - [x] Right-side panel drag separator no longer overlaps the curve list panel (added `shrink-0 overflow-hidden` to curve list wrapper).
+- [x] Right-side curve list scrolls vertically when curve count exceeds available panel height.
 - [x] Toolbar label changed: "平移" → "移动".
 - [x] Copy and download buttons moved from Header to ExportPanel's code output header area.
 
@@ -106,6 +110,7 @@ Still remaining for this goal:
 - [x] Select-all and clear-selection actions implemented.
 - [x] Removed the inactive canvas `select` tool from the toolbar.
 - [x] Selected curve delete implemented.
+- [x] Selected reference image delete implemented from keyboard shortcut.
 - [x] Clear all curves implemented.
 - [x] Undo last drawn curve implemented.
 - [x] Redo / restore last undone curve implemented.
@@ -119,7 +124,7 @@ Still remaining for this goal:
   - `Ctrl+Y` / `Cmd+Y`
   - `Ctrl+Shift+Z` / `Cmd+Shift+Z`
   - `Escape` to clear object selection
-  - `Delete` / `Backspace` to remove selected curves
+  - `Delete` / `Backspace` to remove selected curves or the selected reference image
 - [x] Origin setting mode implemented.
 - [x] Unit length calibration mode implemented.
 - [x] Unit length can be adjusted by dragging the visible coordinate-axis unit point.
@@ -148,8 +153,7 @@ Still remaining for this goal:
 - [x] Export output title unified as `代码输出`.
 - [x] Removed wrapper generation for `tikzpicture` and `#cetz.canvas(...)`.
 - [x] TikZ output formatting refined:
-  - `\draw[...]` on its own line
-  - start point on its own line
+  - `\draw[...]` and the start point on the same line
   - each `.. controls ..` segment on its own line
 - [x] Negative-zero formatting fixed for rounded export numbers.
 - [x] Closed-path snapping toggle added for brush drawing.
@@ -161,6 +165,12 @@ Still remaining for this goal:
 - [x] Grid snap hit coordinates shown temporarily in the canvas status bar.
 - [x] Grid-point snapping for curve anchor and control-handle dragging in pan mode, with green preview circle.
 - [x] Closed-path snapping for curve anchor dragging in pan mode: dragging first or last anchor near opposite endpoint snaps and auto-closes the curve.
+- [x] Point-mode path construction added:
+  - successive click-to-add anchors
+  - default cubic control handles for each segment
+  - double-click to finish and switch back to move mode
+  - `Escape` to cancel an unfinished draft
+  - closed-path snapping back to the first point
 - [x] Closed curves are exported distinctly in all formats.
 - [x] Brush post-processing controls added:
   - simplify tolerance slider
@@ -190,6 +200,7 @@ Still remaining for this goal:
 - [x] Full UI component extraction completed: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, CurveListPanel, ExportPanel.
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
 - [x] Right-side curve list panel wrapper given `shrink-0 overflow-hidden` so the ExportPanel cannot overlap it when the drag separator is moved upward.
+- [x] Curve list panel height chain fixed so only the list area scrolls when many curves are present.
 - [x] Toolbar pan label changed from "平移" to "移动".
 - [x] Copy-code and download buttons consolidated into the ExportPanel code output header (moved from Header).
 - [x] Header no longer contains the copy-export button; it only has title and image upload.

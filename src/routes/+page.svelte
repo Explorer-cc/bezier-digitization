@@ -2727,7 +2727,7 @@
 				rightPanelCollapsed ? 'pointer-events-none invisible' : ''
 			}`}
 		>
-			<div class="shrink-0 overflow-hidden" style:height={`${rightCurvesPanelHeight}px`}>
+			<div class="shrink-0 min-h-0 overflow-hidden" style:height={`${rightCurvesPanelHeight}px`}>
 				<CurveListPanel
 					{curves}
 					{selectedCurveIds}

@@ -23,7 +23,7 @@
 	let selectedCurveIdSet = $derived(new Set(selectedCurveIds));
 </script>
 
-<section class="min-h-0 overflow-hidden border-b border-zinc-200">
+<section class="h-full min-h-0 overflow-hidden border-b border-zinc-200">
 	<div class="flex h-full min-h-0 flex-col p-4">
 		<div class="flex items-center justify-between gap-3">
 			<h2 class="text-sm font-semibold">曲线</h2>
