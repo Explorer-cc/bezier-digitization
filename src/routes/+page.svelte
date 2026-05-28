@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { canvasToCoordinate, defaultCoordinateSystem, getBasis } from '$lib/core/coordinate';
-	import { exportCurvesToTikz } from '$lib/core/exporter';
+	import { exportCurves } from '$lib/core/exporter';
 	import type {
 		CanvasImage,
 		CoordinateSystem,
 		CubicBezierSegment,
 		CurvePath,
+		ExportFormat,
 		Point,
 		ToolMode
 	} from '$lib/core/types';
@@ -62,7 +63,7 @@
 	});
 	let unitRealLength = $state(1);
 	let precision = $state(3);
-	let includeWrapper = $state(true);
+	let exportFormat = $state<ExportFormat>('tikz');
 	let stroke = $state('#111827');
 	let strokeWidth = $state(2);
 	let showGrid = $state(true);
@@ -82,16 +83,31 @@
 		{ id: 'brush', label: '画笔', icon: Pencil },
 		{ id: 'pan', label: '平移', icon: Hand }
 	];
-	const rightSettingsPanelHeight = 150;
+	const exportFormats: Array<{ id: ExportFormat; label: string }> = [
+		{ id: 'tikz', label: 'TikZ' },
+		{ id: 'luadraw', label: 'LuaDraw' },
+		{ id: 'cetz', label: 'CeTZ' }
+	];
+	const rightSettingsPanelHeight = 210;
 
 	let selectedCurveIdSet = $derived(new Set(selectedCurveIds));
 	let selectedCurves = $derived(curves.filter((curve) => selectedCurveIdSet.has(curve.id)));
 	let exportCode = $derived(
-		exportCurvesToTikz(selectedCurves, coordinateSystem, {
+		exportCurves(selectedCurves, coordinateSystem, {
 			precision,
-			includeWrapper
+			format: exportFormat
 		})
 	);
+	let exportTitle = $derived.by(() => {
+		if (exportFormat === 'luadraw') return 'LuaDraw 输出';
+		if (exportFormat === 'cetz') return 'CeTZ 输出';
+		return 'TikZ 输出';
+	});
+	let exportFileName = $derived.by(() => {
+		if (exportFormat === 'luadraw') return 'curves.lua';
+		if (exportFormat === 'cetz') return 'curves.typ';
+		return 'curves.tikz';
+	});
 	let originCoord = $derived(canvasToCoordinate(coordinateSystem.originCanvas, coordinateSystem));
 	let workspaceGridColumns = $derived(
 		`${leftPanelCollapsed ? 0 : leftPanelWidth}px 28px 6px minmax(0, 1fr) 6px 28px ${rightPanelCollapsed ? 0 : rightPanelWidth}px`
@@ -642,7 +658,7 @@
 	async function copyExport() {
 		if (!browser || !exportCode) return;
 		await navigator.clipboard.writeText(exportCode);
-		status = 'TikZ 代码已复制';
+		status = `${exportTitle}代码已复制`;
 	}
 
 	function downloadExport() {
@@ -651,7 +667,7 @@
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
 		anchor.href = url;
-		anchor.download = 'curves.tikz';
+		anchor.download = exportFileName;
 		anchor.click();
 		URL.revokeObjectURL(url);
 	}
@@ -1079,6 +1095,24 @@
 			>
 				<div class="h-full overflow-y-auto p-4">
 					<h2 class="text-sm font-semibold">导出设置</h2>
+					<div class="mt-3">
+						<div class="text-xs text-zinc-600">导出格式</div>
+						<div class="mt-1 grid grid-cols-3 gap-1">
+							{#each exportFormats as format (format.id)}
+								<button
+									class={`h-8 rounded border text-xs ${
+										exportFormat === format.id
+											? 'border-blue-600 bg-blue-50 text-blue-800'
+											: 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50'
+									}`}
+									onclick={() => (exportFormat = format.id)}
+									type="button"
+								>
+									{format.label}
+								</button>
+							{/each}
+						</div>
+					</div>
 					<label class="mt-3 block text-xs text-zinc-600">
 						小数位数
 						<input
@@ -1089,16 +1123,12 @@
 							type="number"
 						/>
 					</label>
-					<label class="mt-3 flex items-center gap-2 text-sm">
-						<input bind:checked={includeWrapper} type="checkbox" />
-						包含 tikzpicture
-					</label>
 				</div>
 			</section>
 			<div
 				role="separator"
 				aria-orientation="horizontal"
-				aria-label="调整 TikZ 输出区域高度"
+				aria-label="调整代码输出区域高度"
 				class={`h-2 shrink-0 cursor-row-resize border-y border-zinc-200 bg-zinc-100 transition-colors hover:bg-blue-200 ${
 					resizingRightSection ? 'bg-blue-300' : ''
 				}`}
@@ -1107,7 +1137,7 @@
 			<section class="flex min-h-0 flex-1 flex-col overflow-hidden">
 				<div class="flex h-full min-h-0 flex-col p-4">
 					<div class="flex items-center justify-between">
-						<h2 class="text-sm font-semibold">TikZ 输出</h2>
+						<h2 class="text-sm font-semibold">代码输出</h2>
 						<button
 							class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
 							onclick={downloadExport}

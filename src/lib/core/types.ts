@@ -40,7 +40,9 @@ export type CanvasImage = {
 
 export type ToolMode = 'brush' | 'pan';
 
+export type ExportFormat = 'tikz' | 'luadraw' | 'cetz';
+
 export type ExportOptions = {
 	precision: number;
-	includeWrapper: boolean;
+	format: ExportFormat;
 };
