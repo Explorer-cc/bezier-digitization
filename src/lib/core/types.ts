@@ -16,6 +16,7 @@ export type CurvePath = {
 	segments: CubicBezierSegment[];
 	stroke: string;
 	strokeWidth: number;
+	closed: boolean;
 };
 
 export type CoordinateSystem = {

@@ -13,6 +13,8 @@ const colorName = (stroke: string) => {
 	return colors[stroke.toLowerCase()] ?? stroke;
 };
 
+const samePoint = (a: Point, b: Point) => Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+
 export function formatNumber(value: number, precision: number) {
 	const fixed = value.toFixed(precision);
 	if (Number(fixed) === 0) return '0';
@@ -54,6 +56,8 @@ export function exportCurveToTikz(
 		);
 	}
 
+	if (curve.closed) parts.push('-- cycle');
+
 	return `${parts.join('\n')};`;
 }
 
@@ -83,6 +87,24 @@ export function exportCurveToLuaDraw(
 	if (!points.length) return '';
 
 	const drawOptions = `line width=${formatNumber(curve.strokeWidth / 10, 2)}pt, draw=${colorName(curve.stroke)}`;
+	if (curve.closed) {
+		const pathParts: string[] = [];
+		for (const [index, segment] of curve.segments.entries()) {
+			if (index === 0)
+				pathParts.push(
+					formatLuaDrawPoint(canvasToCoordinate(segment.start, system), options.precision)
+				);
+			pathParts.push(
+				formatLuaDrawPoint(canvasToCoordinate(segment.control1, system), options.precision),
+				formatLuaDrawPoint(canvasToCoordinate(segment.control2, system), options.precision),
+				formatLuaDrawPoint(canvasToCoordinate(segment.end, system), options.precision),
+				'"b"'
+			);
+		}
+		pathParts.push('"cl"');
+		return `g:Dpath({${pathParts.join(', ')}}, "${drawOptions}")`;
+	}
+
 	return `g:Dbezier({${points.map((point) => formatLuaDrawPoint(point, options.precision)).join(', ')}}, "${drawOptions}")`;
 }
 
@@ -104,6 +126,12 @@ export function exportCurveToCetz(
 ) {
 	const precision = options.precision;
 	const style = `stroke: ${formatNumber(curve.strokeWidth / 10, 2)}pt + ${colorName(curve.stroke)}`;
+	const firstSegment = curve.segments[0];
+	const lastSegment = curve.segments.at(-1);
+	const closingLine =
+		curve.closed && firstSegment && lastSegment && !samePoint(firstSegment.start, lastSegment.end)
+			? `line(${formatCetzPoint(canvasToCoordinate(lastSegment.end, system), precision)}, ${formatCetzPoint(canvasToCoordinate(firstSegment.start, system), precision)}, ${style})`
+			: null;
 
 	return curve.segments
 		.map((segment) => {
@@ -114,6 +142,7 @@ export function exportCurveToCetz(
 
 			return `bezier(${formatCetzPoint(start, precision)}, ${formatCetzPoint(end, precision)}, ${formatCetzPoint(control1, precision)}, ${formatCetzPoint(control2, precision)}, ${style})`;
 		})
+		.concat(closingLine ? [closingLine] : [])
 		.join('\n');
 }
 

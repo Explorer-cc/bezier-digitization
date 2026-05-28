@@ -27,6 +27,23 @@ const curve: CurvePath = {
 			control2: { x: 75, y: -50 },
 			end: { x: 100, y: 0 }
 		}
+	],
+	closed: false
+};
+
+const closedCurve: CurvePath = {
+	...curve,
+	id: 'closed-curve',
+	name: 'Closed Curve',
+	closed: true,
+	segments: [
+		...curve.segments,
+		{
+			start: { x: 100, y: 0 },
+			control1: { x: 75, y: 50 },
+			control2: { x: 25, y: 50 },
+			end: { x: 0, y: 0 }
+		}
 	]
 };
 
@@ -48,6 +65,15 @@ describe('TikZ exporter', () => {
 		);
 	});
 
+	it('exports closed TikZ paths with cycle', () => {
+		expect(
+			exportCurvesToTikz([closedCurve], system, {
+				precision: 2,
+				format: 'tikz'
+			})
+		).toContain('-- cycle;');
+	});
+
 	it('exports LuaDraw Dbezier paths', () => {
 		expect(
 			exportCurvesToLuaDraw([curve], system, {
@@ -57,6 +83,15 @@ describe('TikZ exporter', () => {
 		).toBe('g:Dbezier({Z(0,0), Z(0.25,0.5), Z(0.75,0.5), Z(1,0)}, "line width=0.2pt, draw=black")');
 	});
 
+	it('exports closed LuaDraw paths using Dpath closepath', () => {
+		expect(
+			exportCurvesToLuaDraw([closedCurve], system, {
+				precision: 2,
+				format: 'luadraw'
+			})
+		).toContain('"cl"');
+	});
+
 	it('exports CeTZ bezier paths', () => {
 		expect(
 			exportCurvesToCetz([curve], system, {
@@ -64,6 +99,33 @@ describe('TikZ exporter', () => {
 				format: 'cetz'
 			})
 		).toBe('bezier((0,0), (1,0), (0.25,0.5), (0.75,0.5), stroke: 0.2pt + black)');
+	});
+
+	it('exports closed CeTZ paths with a closing line', () => {
+		expect(
+			exportCurvesToCetz(
+				[
+					{
+						...curve,
+						closed: true
+					}
+				],
+				system,
+				{
+					precision: 2,
+					format: 'cetz'
+				}
+			)
+		).toContain('line((1,0), (0,0), stroke: 0.2pt + black)');
+	});
+
+	it('omits redundant CeTZ closing lines when the last endpoint already equals the start', () => {
+		expect(
+			exportCurvesToCetz([closedCurve], system, {
+				precision: 2,
+				format: 'cetz'
+			})
+		).not.toContain('line(');
 	});
 
 	it('dispatches by export format', () => {

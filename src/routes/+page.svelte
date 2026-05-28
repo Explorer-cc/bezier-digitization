@@ -66,6 +66,7 @@
 	let exportFormat = $state<ExportFormat>('tikz');
 	let stroke = $state('#111827');
 	let strokeWidth = $state(2);
+	let snapClosedPaths = $state(false);
 	let showGrid = $state(true);
 	let leftPanelWidth = $state(280);
 	let rightPanelWidth = $state(360);
@@ -240,6 +241,21 @@
 		return Math.hypot(a.x - b.x, a.y - b.y);
 	}
 
+	function closePathIfSnapped(path: PaperPath) {
+		if (!snapClosedPaths || path.segments.length < 3) return false;
+		const first = path.firstSegment;
+		const last = path.lastSegment;
+		if (!first || !last) return false;
+
+		const snapDistance = 18 / (paper?.view.zoom ?? 1);
+		if (first.point.getDistance(last.point) > snapDistance) return false;
+
+		last.point = first.point.clone();
+		path.closed = true;
+		path.smooth({ type: 'continuous' });
+		return true;
+	}
+
 	function updateOriginHandle(point: Point) {
 		const delta = {
 			x: point.x - coordinateSystem.originCanvas.x,
@@ -365,9 +381,10 @@
 	function segmentsFromPath(path: PaperPath): CubicBezierSegment[] {
 		const segments: CubicBezierSegment[] = [];
 
-		for (let index = 0; index < path.segments.length - 1; index += 1) {
+		const segmentCount = path.closed ? path.segments.length : path.segments.length - 1;
+		for (let index = 0; index < segmentCount; index += 1) {
 			const current = path.segments[index];
-			const next = path.segments[index + 1];
+			const next = path.segments[(index + 1) % path.segments.length];
 			const start = current.point;
 			const end = next.point;
 			segments.push({
@@ -384,6 +401,7 @@
 	function addCurveFromPath(path: PaperPath) {
 		path.simplify(2);
 		path.smooth({ type: 'continuous' });
+		const closed = closePathIfSnapped(path);
 		const segments = segmentsFromPath(path);
 		if (segments.length === 0) {
 			path.remove();
@@ -395,13 +413,16 @@
 			name: `Curve ${curves.length + 1}`,
 			segments,
 			stroke,
-			strokeWidth
+			strokeWidth,
+			closed
 		};
 		curves = [...curves, curve];
 		selectedCurveIds = [curve.id];
 		path.remove();
 		redrawCurves();
-		status = `已生成 ${segments.length} 段 Bezier 曲线`;
+		status = closed
+			? `已生成闭合 Bezier 曲线：${segments.length} 段`
+			: `已生成 ${segments.length} 段 Bezier 曲线`;
 	}
 
 	function removeSelectedCurve() {
@@ -563,6 +584,8 @@
 					new paper.Point(segment.end.x, segment.end.y)
 				);
 			}
+
+			path.closed = curve.closed;
 		}
 
 		drawCalibration();
@@ -848,6 +871,10 @@
 				<label class="block text-xs text-zinc-600">
 					线宽 {strokeWidth}px
 					<input bind:value={strokeWidth} class="mt-1 w-full" max="12" min="1" type="range" />
+				</label>
+				<label class="flex items-center gap-2 text-sm">
+					<input bind:checked={snapClosedPaths} type="checkbox" />
+					开启闭合路径吸附
 				</label>
 			</section>
 
