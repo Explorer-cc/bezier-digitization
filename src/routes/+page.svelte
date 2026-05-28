@@ -52,6 +52,7 @@
 	let canvasResizeFrame = 0;
 	let pointerStart: Point | null = null;
 	let activeHandle: 'origin' | 'unit' | null = null;
+	let hasInitializedCoordinateSystem = false;
 
 	let activeTool = $state<ToolMode>('brush');
 	let image = $state<CanvasImage | null>(null);
@@ -189,10 +190,26 @@
 		return { width, height };
 	}
 
+	function initializeCoordinateSystemFromCanvas(size: { width: number; height: number }) {
+		if (hasInitializedCoordinateSystem) return;
+		const centerX = size.width / 2;
+		const centerY = size.height / 2;
+		const unitCanvasLength = defaultCoordinateSystem.unitCanvasLength;
+
+		coordinateSystem = {
+			...coordinateSystem,
+			originCanvas: { x: centerX, y: centerY },
+			xAxisPoint: { x: centerX + unitCanvasLength, y: centerY },
+			unitCanvasLength
+		};
+		hasInitializedCoordinateSystem = true;
+	}
+
 	function syncCanvasSize() {
 		if (!canvas) return;
 		const size = measureCanvasHost();
 		if (!size) return;
+		initializeCoordinateSystemFromCanvas(size);
 
 		const previousCenter = paper?.view.center;
 		const changed = canvas.width !== size.width || canvas.height !== size.height;
@@ -242,6 +259,26 @@
 
 	function distanceBetween(a: Point, b: Point) {
 		return Math.hypot(a.x - b.x, a.y - b.y);
+	}
+
+	function getOrCreateLayer(name: string) {
+		if (!paper || !project) return null;
+		const existing = project.layers.find((item: PaperLayer) => item.name === name);
+		if (existing) return existing;
+		const layer = new paper.Layer();
+		layer.name = name;
+		return layer;
+	}
+
+	function syncLayerOrder() {
+		const curvesLayer = getOrCreateLayer('curves');
+		const calibrationLayer = getOrCreateLayer('calibration');
+		const referenceLayer = getOrCreateLayer('reference');
+		if (!curvesLayer || !calibrationLayer || !referenceLayer) return;
+
+		curvesLayer.sendToBack();
+		calibrationLayer.insertAbove(curvesLayer);
+		referenceLayer.bringToFront();
 	}
 
 	function closePathIfSnapped(path: PaperPath) {
@@ -497,9 +534,8 @@
 
 	function drawCalibration() {
 		if (!paper || !project) return;
-		const layer =
-			project.layers.find((item: PaperLayer) => item.name === 'calibration') ?? new paper.Layer();
-		layer.name = 'calibration';
+		const layer = getOrCreateLayer('calibration');
+		if (!layer) return;
 		layer.removeChildren();
 		const origin = new paper.Point(
 			coordinateSystem.originCanvas.x,
@@ -601,13 +637,13 @@
 			fontSize: 12 / paper.view.zoom,
 			parent: layer
 		});
+		syncLayerOrder();
 	}
 
 	function redrawCurves() {
 		if (!paper || !project) return;
-		const layer =
-			project.layers.find((item: PaperLayer) => item.name === 'curves') ?? new paper.Layer();
-		layer.name = 'curves';
+		const layer = getOrCreateLayer('curves');
+		if (!layer) return;
 		layer.removeChildren();
 
 		for (const curve of curves) {
@@ -630,11 +666,15 @@
 			path.closed = curve.closed;
 		}
 
+		syncLayerOrder();
 		drawCalibration();
 	}
 
 	async function loadImage(file: File) {
 		if (!paper || !project) return;
+		if (image?.src) {
+			URL.revokeObjectURL(image.src);
+		}
 		const src = URL.createObjectURL(file);
 		image = {
 			id: crypto.randomUUID(),
@@ -648,13 +688,18 @@
 			locked: true
 		};
 
+		const referenceLayer = getOrCreateLayer('reference');
+		if (!referenceLayer) return;
+		referenceLayer.removeChildren();
 		referenceRaster?.remove();
-		referenceRaster = new paper.Raster(src);
+		referenceRaster = new paper.Raster({
+			source: src,
+			parent: referenceLayer
+		});
 		referenceRaster.onLoad = () => {
 			if (!referenceRaster) return;
 			referenceRaster.position = paper!.view.center;
 			referenceRaster.opacity = image?.opacity ?? 0.65;
-			referenceRaster.sendToBack();
 			image = {
 				...image!,
 				x: referenceRaster.bounds.x,
@@ -662,7 +707,7 @@
 				width: referenceRaster.bounds.width,
 				height: referenceRaster.bounds.height
 			};
-			project!.activeLayer.activate();
+			syncLayerOrder();
 			redrawCurves();
 			status = `已载入参考图：${file.name}`;
 		};
@@ -773,7 +818,8 @@
 					strokeColor: stroke,
 					strokeWidth,
 					strokeCap: 'round',
-					strokeJoin: 'round'
+					strokeJoin: 'round',
+					parent: getOrCreateLayer('curves') ?? undefined
 				});
 				activePath.add(event.point);
 				return;
@@ -816,6 +862,7 @@
 		};
 
 		canvasReady = true;
+		syncLayerOrder();
 		drawCalibration();
 	});
 
@@ -831,6 +878,9 @@
 			window.removeEventListener('pointercancel', stopRightSectionResize);
 			window.removeEventListener('keydown', handleShortcutKeydown);
 		}
+		if (image?.src) {
+			URL.revokeObjectURL(image.src);
+		}
 		canvasResizeObserver?.disconnect();
 		tool?.remove();
 		project?.remove();
@@ -841,7 +891,7 @@
 	<title>Bezier Curve Digitizer</title>
 </svelte:head>
 
-<main class="flex h-screen min-h-[720px] flex-col bg-zinc-100 text-zinc-950">
+<main class="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-950">
 	<header class="flex h-14 items-center justify-between border-b border-zinc-300 bg-white px-4">
 		<div>
 			<h1 class="text-base font-semibold">Bezier Curve Digitizer</h1>
