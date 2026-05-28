@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Download } from '@lucide/svelte';
+	import { Copy, Download } from '@lucide/svelte';
 	import type { ExportFormat } from '$lib/core/types';
 
 	let {
@@ -11,6 +11,7 @@
 		onResizeStart,
 		onUpdateFormat,
 		onUpdatePrecision,
+		onCopy,
 		onDownload
 	}: {
 		exportFormat: ExportFormat;
@@ -21,6 +22,7 @@
 		onResizeStart: (event: PointerEvent) => void;
 		onUpdateFormat: (format: ExportFormat) => void;
 		onUpdatePrecision: (value: number) => void;
+		onCopy: () => void;
 		onDownload: () => void;
 	} = $props();
 
@@ -94,14 +96,24 @@
 	<div class="flex h-full min-h-0 flex-col p-4">
 		<div class="flex items-center justify-between">
 			<h2 class="text-sm font-semibold">代码输出</h2>
-			<button
-				class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
-				onclick={onDownload}
-				type="button"
-			>
-				<Download size={14} />
-				下载
-			</button>
+			<div class="flex items-center gap-2">
+				<button
+					class="inline-flex h-8 items-center gap-2 rounded bg-zinc-950 px-2 text-xs text-white hover:bg-zinc-800"
+					onclick={onCopy}
+					type="button"
+				>
+					<Copy size={14} />
+					复制
+				</button>
+				<button
+					class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
+					onclick={onDownload}
+					type="button"
+				>
+					<Download size={14} />
+					下载
+				</button>
+			</div>
 		</div>
 		<textarea
 			class="mt-3 min-h-0 flex-1 resize-none rounded border border-zinc-300 bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-100"

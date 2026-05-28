@@ -20,7 +20,7 @@
 
 	const tools: Array<{ id: ToolMode; label: string; icon: typeof Pencil }> = [
 		{ id: 'brush', label: '画笔', icon: Pencil },
-		{ id: 'pan', label: '平移', icon: Hand }
+		{ id: 'pan', label: '移动', icon: Hand }
 	];
 </script>
 

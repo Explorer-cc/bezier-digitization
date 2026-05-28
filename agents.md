@@ -75,6 +75,8 @@ Already implemented for that goal:
 - Multiple selected curves support batch color and stroke-width editing.
 - Undo/redo now covers object edits and calibration changes, not just brush-created curve insertion.
 - UI has been extracted into eight components: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
+- Grid-point snapping applies to both brush drawing and curve anchor/control-handle dragging, with the same green preview circle and status feedback.
+- Closed-path snapping works during curve anchor dragging: dragging the first or last anchor of an open curve near the opposite endpoint snaps and auto-closes the curve, using the same snap radius and green preview circle.
 
 Still remaining for that goal:
 

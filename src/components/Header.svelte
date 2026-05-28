@@ -1,11 +1,9 @@
 <script lang="ts">
-	import { Copy, Image as ImageIcon } from '@lucide/svelte';
+	import { Image as ImageIcon } from '@lucide/svelte';
 
 	let {
-		onCopyExport,
 		onFileChange
 	}: {
-		onCopyExport: () => void;
 		onFileChange: (event: Event) => void;
 	} = $props();
 
@@ -37,14 +35,6 @@
 		>
 			<ImageIcon size={16} />
 			上传图片
-		</button>
-		<button
-			class="inline-flex h-9 items-center gap-2 rounded bg-zinc-950 px-3 text-sm text-white hover:bg-zinc-800"
-			onclick={onCopyExport}
-			type="button"
-		>
-			<Copy size={16} />
-			复制代码
 		</button>
 	</div>
 </header>

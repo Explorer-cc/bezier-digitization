@@ -1759,6 +1759,7 @@
 				if (target?.kind === 'curve-handle') {
 					beginPendingEditHistory();
 					activeCurveHandle = target.curveHandle;
+					clearClosedPathSnapPreview();
 					setSelectedCurves([target.curveHandle.curveId]);
 					updateCurveSelectionStatus();
 					return;
@@ -1826,16 +1827,43 @@
 				return;
 			}
 			if (activeTool === 'pan' && activeCurveHandle) {
-				const point = toPlainPoint(event.point);
-				if (activeCurveHandle.kind === 'anchor') {
-					moveCurveAnchor(activeCurveHandle.curveId, activeCurveHandle.index, point);
+				const rawPoint = toPlainPoint(event.point);
+				const handle = activeCurveHandle!;
+				let snappedPoint = getSnappedBrushPoint(rawPoint);
+				const curve = curves.find((c) => c.id === handle.curveId);
+				if (snapClosedPaths && curve && !curve.closed && handle.kind === 'anchor') {
+					const snapRadius = getSnapRadius();
+					const segCount = curve.segments.length;
+					let targetPoint: Point | null = null;
+					if (handle.index === 0) {
+						const endPoint = curve.segments[segCount - 1].end;
+						if (distanceBetween(rawPoint, endPoint) <= snapRadius) targetPoint = endPoint;
+					} else if (handle.index === segCount) {
+						const startPoint = curve.segments[0].start;
+						if (distanceBetween(rawPoint, startPoint) <= snapRadius) targetPoint = startPoint;
+					}
+					if (targetPoint) {
+						snappedPoint = targetPoint;
+						updateSnapPreviewCircle(targetPoint, snapRadius);
+						snapPreviewStatus = '';
+					}
+				}
+				if (handle.kind === 'anchor') {
+					moveCurveAnchor(handle.curveId, handle.index, snappedPoint);
 				} else {
 					moveCurveControlHandle(
-						activeCurveHandle.curveId,
-						activeCurveHandle.kind,
-						activeCurveHandle.index,
-						point
+						handle.curveId,
+						handle.kind,
+						handle.index,
+						snappedPoint
 					);
+				}
+				const gridSnap = getGridPointSnapState(rawPoint);
+				if (gridSnap.eligible && gridSnap.withinSnapRange && gridSnap.targetPoint && gridSnap.gridCoordinate) {
+					updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
+					snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+				} else if (!(snapClosedPaths && curve && !curve.closed && handle.kind === 'anchor')) {
+					clearClosedPathSnapPreview();
 				}
 				return;
 			}
@@ -1869,7 +1897,33 @@
 				finalizePendingEditHistory('已更新坐标校准');
 			}
 			if (activeCurveHandle) {
+				const handle = activeCurveHandle!;
+				const dragCurve = curves.find((c) => c.id === handle.curveId);
+				if (
+					snapClosedPaths &&
+					dragCurve &&
+					!dragCurve.closed &&
+					handle.kind === 'anchor' &&
+					(handle.index === 0 || handle.index === dragCurve.segments.length)
+				) {
+					const snapRadius = getSnapRadius();
+					const segCount = dragCurve.segments.length;
+					const startPoint = dragCurve.segments[0].start;
+					const endPoint = dragCurve.segments[segCount - 1].end;
+					if (distanceBetween(startPoint, endPoint) <= snapRadius) {
+						if (handle.index === 0) {
+							moveCurveAnchor(handle.curveId, 0, endPoint);
+						} else {
+							moveCurveAnchor(handle.curveId, segCount, startPoint);
+						}
+						curves = curves.map((c) =>
+							c.id === handle.curveId ? { ...c, closed: true } : c
+						);
+						redrawCurves();
+					}
+				}
 				finalizePendingEditHistory('已更新路径');
+				clearClosedPathSnapPreview();
 			}
 			if (activeImageHandle) {
 				finalizePendingEditHistory('已更新参考图');
@@ -1915,7 +1969,7 @@
 </svelte:head>
 
 <main class="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-950">
-	<Header onCopyExport={copyExport} onFileChange={handleFileChange} />
+	<Header onFileChange={handleFileChange} />
 
 	<div class="grid min-h-0 flex-1" style:grid-template-columns={workspaceGridColumns}>
 		<aside
@@ -2029,7 +2083,7 @@
 				rightPanelCollapsed ? 'pointer-events-none invisible' : ''
 			}`}
 		>
-			<div style:height={`${rightCurvesPanelHeight}px`}>
+			<div class="shrink-0 overflow-hidden" style:height={`${rightCurvesPanelHeight}px`}>
 				<CurveListPanel
 					{curves}
 					{selectedCurveIds}
@@ -2050,6 +2104,7 @@
 				onUpdateFormat={(v) => (exportFormat = v)}
 				onUpdatePrecision={(v) => (precision = v)}
 				onDownload={downloadExport}
+				onCopy={copyExport}
 			/>
 		</aside>
 	</div>

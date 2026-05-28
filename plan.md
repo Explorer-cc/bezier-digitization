@@ -26,6 +26,8 @@ Already implemented toward that goal:
 - [x] Single selected curves support direct anchor and Bezier-handle editing on canvas.
 - [x] Multiple selected curves support batch stroke color and width editing.
 - [x] Undo/redo now spans curve creation, curve editing, image editing, and calibration changes.
+- [x] Grid-point snapping applies to curve anchor and control-handle dragging in pan mode, with the same green preview circle and status feedback as brush drawing.
+- [x] Closed-path snapping works during curve anchor dragging: dragging the first or last anchor near the opposite endpoint snaps and auto-closes the curve.
 - [x] Component extraction completed with eight UI components under `src/components/`:
   - Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
 
@@ -148,6 +150,8 @@ Still remaining for this goal:
 - [x] Grid-point snapping implemented for brush drawing.
 - [x] Grid-point snapping shares the same pixel-threshold-derived project-space radius as closed-path snapping.
 - [x] Grid snap hit coordinates shown temporarily in the canvas status bar.
+- [x] Grid-point snapping for curve anchor and control-handle dragging in pan mode, with green preview circle.
+- [x] Closed-path snapping for curve anchor dragging in pan mode: dragging first or last anchor near opposite endpoint snaps and auto-closes the curve.
 - [x] Closed curves are exported distinctly in all formats.
 - [x] Brush post-processing controls added:
   - simplify tolerance slider
@@ -252,6 +256,8 @@ Still remaining for this goal:
 - [x] Add visible anchors for selected curve.
 - [x] Add visible control handles for selected curve.
 - [x] Let users drag anchors and control handles.
+- [x] Grid-point snapping for curve anchors and control handles during drag, with green preview circle.
+- [x] Closed-path snapping for curve anchor dragging: dragging first or last anchor near opposite endpoint snaps and auto-closes the curve.
 - [x] Add curve rename.
 - [x] Add curve color and stroke width editing after creation.
 - [x] Add undo/redo for drawing.
