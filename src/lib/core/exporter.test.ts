@@ -61,7 +61,7 @@ describe('TikZ exporter', () => {
 				format: 'tikz'
 			})
 		).toBe(
-			'\\draw[line width=0.2pt, draw=black]\n(0,0)\n.. controls (0.25,0.5) and (0.75,0.5) .. (1,0);'
+			'\\draw[line width=0.2pt, draw=black] (0,0)\n.. controls (0.25,0.5) and (0.75,0.5) .. (1,0);'
 		);
 	});
 

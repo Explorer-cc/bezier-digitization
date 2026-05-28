@@ -44,7 +44,7 @@ export function exportCurveToTikz(
 	if (!firstSegment) return '';
 
 	const start = canvasToCoordinate(firstSegment.start, system);
-	const parts = [`\\draw[${style}]`, formatPoint(start, precision)];
+	const parts = [`\\draw[${style}] ${formatPoint(start, precision)}`];
 
 	for (const segment of curve.segments) {
 		const control1 = canvasToCoordinate(segment.control1, system);

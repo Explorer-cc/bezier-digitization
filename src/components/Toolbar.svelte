@@ -20,13 +20,14 @@
 
 	const tools: Array<{ id: ToolMode; label: string; icon: typeof Pencil }> = [
 		{ id: 'brush', label: '画笔', icon: Pencil },
+		{ id: 'point', label: '描点', icon: Pencil },
 		{ id: 'pan', label: '移动', icon: Hand }
 	];
 </script>
 
 <section>
 	<h2 class="text-sm font-semibold">工具</h2>
-	<div class="mt-3 grid grid-cols-2 gap-2">
+	<div class="mt-3 grid grid-cols-3 gap-2">
 		{#each tools as item (item.id)}
 			{@const Icon = item.icon}
 			<button

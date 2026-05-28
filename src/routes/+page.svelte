@@ -55,6 +55,7 @@
 	let activePath: PaperPath | null = null;
 	let referenceRaster: PaperRaster | null = null;
 	let snapPreviewCircle: PaperPath | null = null;
+	let pointPreviewPath: PaperPath | null = null;
 	let canvasResizeObserver: ResizeObserver | null = null;
 	let canvasResizeFrame = 0;
 	let pointerStart: Point | null = null;
@@ -71,6 +72,10 @@
 	let imageRotationStartAngle = 0;
 	let imageNaturalSize: { width: number; height: number } | null = null;
 	let hasInitializedCoordinateSystem = false;
+	let pointModeAnchors = $state<Point[]>([]);
+	let pointModeHoverPoint = $state<Point | null>(null);
+	let pointModeLastClickAt = 0;
+	let pointModeLastClickPoint: Point | null = null;
 
 	type EditorSnapshot = {
 		curves: CurvePath[];
@@ -345,16 +350,163 @@
 
 	function updateStatusForTool() {
 		if (activeTool === 'brush') status = '按住拖动画出曲线';
+		else if (activeTool === 'point') status = '逐点点击描出路径，双击完成';
 		else if (activeTool === 'pan') status = '拖动画布空白区域平移；也可拖动原点或单位点';
 	}
 
 	function setTool(mode: ToolMode) {
+		if (activeTool === 'point' && mode !== 'point') {
+			cancelPointModeDraft();
+		}
 		activeTool = mode;
 		activeHandle = null;
 		hoverCanvasCursor = null;
 		clearClosedPathSnapPreview();
 		document.body.classList.remove('cursor-pan-tool');
 		updateStatusForTool();
+	}
+
+	function clearPointModePreview() {
+		pointPreviewPath?.remove();
+		pointPreviewPath = null;
+		pointModeHoverPoint = null;
+	}
+
+	function cancelPointModeDraft() {
+		pointModeAnchors = [];
+		pointModeLastClickAt = 0;
+		pointModeLastClickPoint = null;
+		clearPointModePreview();
+		clearClosedPathSnapPreview();
+	}
+
+	function createDefaultCubicSegment(start: Point, end: Point): CubicBezierSegment {
+		return {
+			start,
+			control1: {
+				x: start.x + (end.x - start.x) / 3,
+				y: start.y + (end.y - start.y) / 3
+			},
+			control2: {
+				x: start.x + ((end.x - start.x) * 2) / 3,
+				y: start.y + ((end.y - start.y) * 2) / 3
+			},
+			end
+		};
+	}
+
+	function buildSegmentsFromPoints(points: Point[]) {
+		const segments: CubicBezierSegment[] = [];
+		for (let index = 0; index < points.length - 1; index += 1) {
+			segments.push(createDefaultCubicSegment(points[index], points[index + 1]));
+		}
+		return segments;
+	}
+
+	function getPointModeClosedSnapState(point: Point) {
+		if (!snapClosedPaths || pointModeAnchors.length < 2) {
+			return {
+				eligible: false,
+				withinSnapRange: false,
+				snapRadius: 0,
+				targetPoint: null as Point | null
+			};
+		}
+		const targetPoint = pointModeAnchors[0];
+		const snapRadius = getSnapRadius();
+		return {
+			eligible: true,
+			withinSnapRange: distanceBetween(point, targetPoint) <= snapRadius,
+			snapRadius,
+			targetPoint
+		};
+	}
+
+	function updatePointModePreview(hoverPoint?: Point | null) {
+		if (!paper) return;
+		pointPreviewPath?.remove();
+		pointPreviewPath = null;
+		const draftPoints = [...pointModeAnchors];
+		const nextHoverPoint = hoverPoint ?? pointModeHoverPoint;
+		if (nextHoverPoint) {
+			pointModeHoverPoint = nextHoverPoint;
+		}
+		if (nextHoverPoint && pointModeAnchors.length) {
+			draftPoints.push(nextHoverPoint);
+		}
+		if (!draftPoints.length) return;
+		const previewLayer = getOrCreateLayer('preview');
+		if (!previewLayer) return;
+		pointPreviewPath = new paper.Path({
+			strokeColor: '#f59e0b',
+			strokeWidth: 2 / paper.view.zoom,
+			dashArray: [8 / paper.view.zoom, 5 / paper.view.zoom],
+			parent: previewLayer
+		});
+		pointPreviewPath.moveTo(new paper.Point(draftPoints[0].x, draftPoints[0].y));
+		const previewSegments = buildSegmentsFromPoints(draftPoints);
+		for (const segment of previewSegments) {
+			pointPreviewPath.cubicCurveTo(
+				new paper.Point(segment.control1.x, segment.control1.y),
+				new paper.Point(segment.control2.x, segment.control2.y),
+				new paper.Point(segment.end.x, segment.end.y)
+			);
+		}
+		syncLayerOrder();
+	}
+
+	function commitPointModeCurve(options?: { closed?: boolean; finalPoint?: Point | null }) {
+		const closed = options?.closed ?? false;
+		const finalPoint = options?.finalPoint ?? null;
+		const points = closed && finalPoint ? [...pointModeAnchors, finalPoint] : [...pointModeAnchors];
+		if (points.length < 2) {
+			cancelPointModeDraft();
+			setTool('pan');
+			return;
+		}
+		const segments = buildSegmentsFromPoints(points);
+		const nextCurve: CurvePath = {
+			id: crypto.randomUUID(),
+			name: `Curve ${curves.length + 1}`,
+			segments,
+			stroke,
+			strokeWidth,
+			closed
+		};
+		commitEditorMutation(() => {
+			curves = [...curves, nextCurve];
+			selectedCurveIds = [nextCurve.id];
+			selectedObject = { type: 'curve', id: nextCurve.id };
+		}, closed ? '已吸附到起点并闭合路径' : '已完成描点路径');
+		cancelPointModeDraft();
+		setTool('pan');
+		updateCurveSelectionStatus();
+	}
+
+	function isPointModeDoubleClick(point: Point) {
+		const now = Date.now();
+		const isDoubleClick =
+			!!pointModeLastClickPoint &&
+			now - pointModeLastClickAt <= 300 &&
+			distanceBetween(pointModeLastClickPoint, point) <= 8 / (paper?.view.zoom ?? 1);
+		pointModeLastClickAt = now;
+		pointModeLastClickPoint = point;
+		return isDoubleClick;
+	}
+
+	function addPointModeAnchor(point: Point) {
+		const lastPoint = pointModeAnchors.at(-1);
+		if (lastPoint && distanceBetween(lastPoint, point) < 0.5) {
+			return;
+		}
+		const nextAnchors = [...pointModeAnchors, point];
+		pointModeAnchors = nextAnchors;
+		pointModeHoverPoint = point;
+		updatePointModePreview(point);
+		status =
+			nextAnchors.length === 1
+				? '已落下起点，继续点击添加下一点'
+				: `已添加第 ${nextAnchors.length} 个描点，双击完成`;
 	}
 
 	function getCursorClassForImageHandle(handle: ImageResizeHandle) {
@@ -1457,6 +1609,15 @@
 		}, `已删除 ${idsToRemove.size} 条曲线`);
 	}
 
+	function removeSelectedImage() {
+		if (!selectedImage) return;
+		commitEditorMutation(() => {
+			image = null;
+			selectedObject = null;
+			selectedCurveIds = [];
+		}, '已删除参考图');
+	}
+
 	function clearCurves() {
 		commitEditorMutation(() => {
 			curves = [];
@@ -1498,6 +1659,12 @@
 
 		const key = event.key.toLowerCase();
 		if (key === 'escape') {
+			if (activeTool === 'point' && pointModeAnchors.length) {
+				event.preventDefault();
+				cancelPointModeDraft();
+				status = '已取消描点';
+				return;
+			}
 			if (selectedObject || selectedCurveIds.length) {
 				event.preventDefault();
 				clearObjectSelection();
@@ -1507,6 +1674,11 @@
 		}
 
 		if (key === 'delete' || key === 'backspace') {
+			if (selectedObject?.type === 'image' && selectedImage) {
+				event.preventDefault();
+				removeSelectedImage();
+				return;
+			}
 			if (selectedCurveIds.length) {
 				event.preventDefault();
 				removeSelectedCurve();
@@ -1636,6 +1808,9 @@
 			fontSize: 12 / paper.view.zoom,
 			parent: layer
 		});
+		if (activeTool === 'point' || pointModeAnchors.length) {
+			updatePointModePreview();
+		}
 		drawObjectSelectionOverlay();
 		syncLayerOrder();
 	}
@@ -2130,6 +2305,33 @@
 			if (!paper) return;
 			const point = toPlainPoint(event.point);
 			hoverCanvasCursor = null;
+			if (activeTool === 'point') {
+				const closedSnap = getPointModeClosedSnapState(point);
+				if (closedSnap.eligible && closedSnap.withinSnapRange && closedSnap.targetPoint) {
+					updateSnapPreviewCircle(closedSnap.targetPoint, closedSnap.snapRadius);
+					snapPreviewStatus = '吸附到起点，点击闭合路径';
+					commitPointModeCurve({ closed: true, finalPoint: closedSnap.targetPoint });
+					return;
+				}
+				const snappedPoint = getSnappedBrushPoint(point);
+				const gridSnap = getGridPointSnapState(point);
+				if (
+					gridSnap.eligible &&
+					gridSnap.withinSnapRange &&
+					gridSnap.targetPoint &&
+					gridSnap.gridCoordinate
+				) {
+					updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
+					snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+				} else {
+					clearClosedPathSnapPreview();
+				}
+				addPointModeAnchor(snappedPoint);
+				if (isPointModeDoubleClick(snappedPoint)) {
+					commitPointModeCurve();
+				}
+				return;
+			}
 			const handle = activeTool === 'pan' ? hitCalibrationHandle(point) : null;
 
 			if (handle) {
@@ -2350,6 +2552,32 @@
 		};
 
 		tool.onMouseMove = (event: PaperMouseEvent) => {
+			if (activeTool === 'point') {
+				const rawPoint = toPlainPoint(event.point);
+				const closedSnap = getPointModeClosedSnapState(rawPoint);
+				let snappedPoint: Point;
+				if (closedSnap.eligible && closedSnap.withinSnapRange && closedSnap.targetPoint) {
+					snappedPoint = closedSnap.targetPoint;
+					updateSnapPreviewCircle(closedSnap.targetPoint, closedSnap.snapRadius);
+					snapPreviewStatus = '吸附到起点，点击闭合路径';
+				} else {
+					snappedPoint = getSnappedBrushPoint(rawPoint);
+					const gridSnap = getGridPointSnapState(rawPoint);
+					if (
+						gridSnap.eligible &&
+						gridSnap.withinSnapRange &&
+						gridSnap.targetPoint &&
+						gridSnap.gridCoordinate
+					) {
+						updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
+						snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+					} else {
+						clearClosedPathSnapPreview();
+					}
+				}
+				updatePointModePreview(snappedPoint);
+				return;
+			}
 			updateCanvasHoverCursor(toPlainPoint(event.point));
 		};
 

@@ -42,7 +42,7 @@ export type CanvasImage = {
 
 export type CanvasObjectType = 'image' | 'curve';
 
-export type ToolMode = 'brush' | 'pan';
+export type ToolMode = 'brush' | 'point' | 'pan';
 
 export type ExportFormat = 'tikz' | 'luadraw' | 'cetz';
 
