@@ -6,6 +6,7 @@
 		smoothDrawnPath = $bindable(),
 		snapToGridPoints = $bindable(),
 		snapClosedPaths = $bindable(),
+		snapCollinearControlPoints = $bindable(),
 		closedPathSnapDistance = $bindable()
 	}: {
 		stroke: string;
@@ -14,6 +15,7 @@
 		smoothDrawnPath: boolean;
 		snapToGridPoints: boolean;
 		snapClosedPaths: boolean;
+		snapCollinearControlPoints: boolean;
 		closedPathSnapDistance: number;
 	} = $props();
 </script>
@@ -52,11 +54,15 @@
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapToGridPoints} type="checkbox" />
-		开启格点吸附
+		格点吸附
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapClosedPaths} type="checkbox" />
-		开启闭合路径吸附
+		闭合路径吸附
+	</label>
+	<label class="flex items-center gap-2 text-sm">
+		<input bind:checked={snapCollinearControlPoints} type="checkbox" />
+		相邻控制点共线吸附
 	</label>
 	<label class="block text-xs text-zinc-600">
 		吸附阈值 {closedPathSnapDistance}pt
