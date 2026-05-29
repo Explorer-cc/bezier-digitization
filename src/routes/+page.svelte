@@ -91,7 +91,7 @@
 
 	let pendingEditSnapshot: EditorSnapshot | null = null;
 
-	let activeTool = $state<ToolMode>('brush');
+	let activeTool = $state<ToolMode>('pan');
 	let image = $state<CanvasImage | null>(null);
 	let selectedObject = $state<{ type: CanvasObjectType; id: string } | null>(null);
 	let curves = $state<CurvePath[]>([]);
@@ -110,7 +110,9 @@
 	let smoothDrawnPath = $state(true);
 	let snapToGridPoints = $state(false);
 	let snapClosedPaths = $state(true);
+	let snapOrthogonalControlPoints = $state(false);
 	let snapCollinearControlPoints = $state(true);
+	let snapAngleTolerance = $state(10);
 	let closedPathSnapDistance = $state(15);
 	let showGrid = $state(true);
 	let leftPanelWidth = $state(240);
@@ -234,7 +236,9 @@
 				simplifyTolerance,
 				smoothDrawnPath,
 				snapToGridPoints,
+				snapOrthogonalControlPoints,
 				snapCollinearControlPoints,
+				snapAngleTolerance,
 				closedPathSnapDistance,
 				closedPathSnapDistanceUnit: 'pt'
 			})
@@ -251,15 +255,20 @@
 				simplifyTolerance?: number;
 				smoothDrawnPath?: boolean;
 				snapToGridPoints?: boolean;
+				snapOrthogonalControlPoints?: boolean;
 				snapCollinearControlPoints?: boolean;
+				snapAngleTolerance?: number;
 				closedPathSnapDistance?: number;
 				closedPathSnapDistanceUnit?: 'px' | 'pt';
 			};
 			simplifyTolerance = clamp(parsed.simplifyTolerance ?? simplifyTolerance, 0, 5);
 			smoothDrawnPath = parsed.smoothDrawnPath ?? smoothDrawnPath;
 			snapToGridPoints = parsed.snapToGridPoints ?? snapToGridPoints;
+			snapOrthogonalControlPoints =
+				parsed.snapOrthogonalControlPoints ?? snapOrthogonalControlPoints;
 			snapCollinearControlPoints =
 				parsed.snapCollinearControlPoints ?? snapCollinearControlPoints;
+			snapAngleTolerance = clamp(parsed.snapAngleTolerance ?? snapAngleTolerance, 5, 30);
 			const storedSnapDistance =
 				parsed.closedPathSnapDistanceUnit === 'pt'
 					? (parsed.closedPathSnapDistance ?? closedPathSnapDistance)
@@ -737,8 +746,8 @@
 			normalizedOpposite.x * normalizedCurrent.x +
 			normalizedOpposite.y * normalizedCurrent.y;
 		const angleDegrees = (Math.acos(clamp(dot, -1, 1)) * 180) / Math.PI;
-		const snapToSameDirection = angleDegrees <= 10;
-		const snapToOppositeDirection = angleDegrees >= 170;
+		const snapToSameDirection = angleDegrees <= snapAngleTolerance;
+		const snapToOppositeDirection = angleDegrees >= 180 - snapAngleTolerance;
 		if (!snapToSameDirection && !snapToOppositeDirection) return null;
 
 		const snapDirection = snapToSameDirection
@@ -763,6 +772,57 @@
 			snappedPoint,
 			guideStart,
 			guideEnd
+		};
+	}
+
+	function getOrthogonalControlSnapState(point: Point, anchorPoint: Point) {
+		const currentVector = {
+			x: point.x - anchorPoint.x,
+			y: point.y - anchorPoint.y
+		};
+		const currentLength = Math.hypot(currentVector.x, currentVector.y);
+		if (currentLength < 1e-6) return null;
+
+		const angleDegrees = (Math.atan2(currentVector.y, currentVector.x) * 180) / Math.PI;
+		const candidates = [
+			{ angle: 0, orientation: 'horizontal' as const },
+			{ angle: 90, orientation: 'vertical' as const },
+			{ angle: 180, orientation: 'horizontal' as const },
+			{ angle: -90, orientation: 'vertical' as const }
+		];
+		const normalizedAngleDifference = (left: number, right: number) => {
+			const difference = ((left - right + 540) % 360) - 180;
+			return Math.abs(difference);
+		};
+		const bestCandidate = candidates.reduce((best, candidate) => {
+			const difference = normalizedAngleDifference(angleDegrees, candidate.angle);
+			if (!best || difference < best.difference) {
+				return { ...candidate, difference };
+			}
+			return best;
+		}, null as ({ angle: number; orientation: 'horizontal' | 'vertical'; difference: number } | null));
+		if (!bestCandidate || bestCandidate.difference > snapAngleTolerance) return null;
+
+		const snapDirection =
+			bestCandidate.orientation === 'horizontal'
+				? { x: Math.sign(currentVector.x) || 1, y: 0 }
+				: { x: 0, y: Math.sign(currentVector.y) || 1 };
+
+		const snappedPoint = {
+			x: anchorPoint.x + snapDirection.x * currentLength,
+			y: anchorPoint.y + snapDirection.y * currentLength
+		};
+		const guideStart = getRayIntersectionWithViewBounds(anchorPoint, snapDirection);
+		const guideEnd = getRayIntersectionWithViewBounds(anchorPoint, {
+			x: -snapDirection.x,
+			y: -snapDirection.y
+		});
+
+		return {
+			snappedPoint,
+			guideStart,
+			guideEnd,
+			orientation: bestCandidate.orientation
 		};
 	}
 
@@ -2585,7 +2645,7 @@
 				const handle = activeCurveHandle!;
 				let snappedPoint = getSnappedBrushPoint(rawPoint);
 				const curve = curves.find((c) => c.id === handle.curveId);
-				let collinearControlSnapActive = false;
+				let controlGuideActive = false;
 				if (snapClosedPaths && curve && !curve.closed && handle.kind === 'anchor') {
 					const snapRadius = getSnapRadius();
 					const segCount = curve.segments.length;
@@ -2604,7 +2664,35 @@
 					}
 				}
 				if (
+					snapOrthogonalControlPoints &&
+					curve &&
+					(handle.kind === 'control1' || handle.kind === 'control2')
+				) {
+					const anchorPoint =
+						handle.kind === 'control1'
+							? (curve.segments[handle.index]?.start ?? null)
+							: (curve.segments[handle.index]?.end ?? null);
+					if (anchorPoint) {
+						const orthogonalSnapState = getOrthogonalControlSnapState(snappedPoint, anchorPoint);
+						if (orthogonalSnapState) {
+							snappedPoint = orthogonalSnapState.snappedPoint;
+							controlGuideActive = true;
+							updateCollinearControlSnapPreview(
+								orthogonalSnapState.guideStart,
+								orthogonalSnapState.guideEnd
+							);
+							snapPreviewCircle?.remove();
+							snapPreviewCircle = null;
+							snapPreviewStatus =
+								orthogonalSnapState.orientation === 'horizontal'
+									? '控制点水平吸附'
+									: '控制点垂直吸附';
+						}
+					}
+				}
+				if (
 					snapCollinearControlPoints &&
+					!controlGuideActive &&
 					curve &&
 					(handle.kind === 'control1' || handle.kind === 'control2')
 				) {
@@ -2612,7 +2700,7 @@
 					const collinearSnapState = getCollinearControlSnapState(curve, controlHandle, snappedPoint);
 					if (collinearSnapState) {
 						snappedPoint = collinearSnapState.snappedPoint;
-						collinearControlSnapActive = true;
+						controlGuideActive = true;
 						updateCollinearControlSnapPreview(
 							collinearSnapState.guideStart,
 							collinearSnapState.guideEnd
@@ -2622,7 +2710,7 @@
 						snapPreviewStatus = '相邻控制点共线吸附';
 					}
 				}
-				if (!collinearControlSnapActive) {
+				if (!controlGuideActive) {
 					clearCollinearControlSnapPreview();
 				}
 				if (handle.kind === 'anchor') {
@@ -2636,7 +2724,7 @@
 					);
 				}
 				const gridSnap = getGridPointSnapState(rawPoint);
-				if (collinearControlSnapActive) {
+				if (controlGuideActive) {
 					snapPreviewCircle?.remove();
 					snapPreviewCircle = null;
 				} else if (
@@ -2820,7 +2908,9 @@
 				bind:smoothDrawnPath
 				bind:snapToGridPoints
 				bind:snapClosedPaths
+				bind:snapOrthogonalControlPoints
 				bind:snapCollinearControlPoints
+				bind:snapAngleTolerance
 				bind:closedPathSnapDistance
 			/>
 			<CalibrationSettings

@@ -6,7 +6,9 @@
 		smoothDrawnPath = $bindable(),
 		snapToGridPoints = $bindable(),
 		snapClosedPaths = $bindable(),
+		snapOrthogonalControlPoints = $bindable(),
 		snapCollinearControlPoints = $bindable(),
+		snapAngleTolerance = $bindable(),
 		closedPathSnapDistance = $bindable()
 	}: {
 		stroke: string;
@@ -15,7 +17,9 @@
 		smoothDrawnPath: boolean;
 		snapToGridPoints: boolean;
 		snapClosedPaths: boolean;
+		snapOrthogonalControlPoints: boolean;
 		snapCollinearControlPoints: boolean;
+		snapAngleTolerance: number;
 		closedPathSnapDistance: number;
 	} = $props();
 </script>
@@ -31,7 +35,7 @@
 		<input
 			bind:value={strokeWidth}
 			class="mt-1 w-full"
-			max="5"
+			max="3"
 			min="0.1"
 			step="0.1"
 			type="range"
@@ -61,6 +65,10 @@
 		闭合路径吸附
 	</label>
 	<label class="flex items-center gap-2 text-sm">
+		<input bind:checked={snapOrthogonalControlPoints} type="checkbox" />
+		垂直/水平控制点吸附
+	</label>
+	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapCollinearControlPoints} type="checkbox" />
 		相邻控制点共线吸附
 	</label>
@@ -73,6 +81,18 @@
 			max="38"
 			min="4"
 			step="0.5"
+			type="range"
+		/>
+	</label>
+	<label class="block text-xs text-zinc-600">
+		吸附角度 {snapAngleTolerance}°
+		<input
+			bind:value={snapAngleTolerance}
+			class="mt-1 w-full"
+			disabled={!snapOrthogonalControlPoints && !snapCollinearControlPoints}
+			max="30"
+			min="5"
+			step="1"
 			type="range"
 		/>
 	</label>
