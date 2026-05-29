@@ -39,7 +39,7 @@ export function exportCurveToTikz(
 	options: ExportOptions
 ) {
 	const precision = options.precision;
-	const style = `line width=${formatNumber(curve.strokeWidth / 10, 2)}pt, draw=${colorName(curve.stroke)}`;
+	const style = `line width=${formatNumber(curve.strokeWidth, 2)}pt, draw=${colorName(curve.stroke)}`;
 	const firstSegment = curve.segments[0];
 	if (!firstSegment) return '';
 
@@ -86,7 +86,7 @@ export function exportCurveToLuaDraw(
 
 	if (!points.length) return '';
 
-	const drawOptions = `line width=${formatNumber(curve.strokeWidth / 10, 2)}pt, draw=${colorName(curve.stroke)}`;
+	const drawOptions = `line width=${formatNumber(curve.strokeWidth, 2)}pt, draw=${colorName(curve.stroke)}`;
 	if (curve.closed) {
 		const pathParts: string[] = [];
 		for (const [index, segment] of curve.segments.entries()) {
@@ -125,7 +125,7 @@ export function exportCurveToCetz(
 	options: ExportOptions
 ) {
 	const precision = options.precision;
-	const style = `stroke: ${formatNumber(curve.strokeWidth / 10, 2)}pt + ${colorName(curve.stroke)}`;
+	const style = `stroke: ${formatNumber(curve.strokeWidth, 2)}pt + ${colorName(curve.stroke)}`;
 	const firstSegment = curve.segments[0];
 	const lastSegment = curve.segments.at(-1);
 	const closingLine =

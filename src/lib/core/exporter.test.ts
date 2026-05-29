@@ -19,7 +19,7 @@ const curve: CurvePath = {
 	id: 'curve-1',
 	name: 'Curve 1',
 	stroke: '#111827',
-	strokeWidth: 2,
+	strokeWidth: 0.4,
 	segments: [
 		{
 			start: { x: 0, y: 0 },
@@ -61,7 +61,7 @@ describe('TikZ exporter', () => {
 				format: 'tikz'
 			})
 		).toBe(
-			'\\draw[line width=0.2pt, draw=black] (0,0)\n.. controls (0.25,0.5) and (0.75,0.5) .. (1,0);'
+			'\\draw[line width=0.4pt, draw=black] (0,0)\n.. controls (0.25,0.5) and (0.75,0.5) .. (1,0);'
 		);
 	});
 
@@ -80,7 +80,7 @@ describe('TikZ exporter', () => {
 				precision: 2,
 				format: 'luadraw'
 			})
-		).toBe('g:Dbezier({Z(0,0), Z(0.25,0.5), Z(0.75,0.5), Z(1,0)}, "line width=0.2pt, draw=black")');
+		).toBe('g:Dbezier({Z(0,0), Z(0.25,0.5), Z(0.75,0.5), Z(1,0)}, "line width=0.4pt, draw=black")');
 	});
 
 	it('exports closed LuaDraw paths using Dpath closepath', () => {
@@ -98,7 +98,7 @@ describe('TikZ exporter', () => {
 				precision: 2,
 				format: 'cetz'
 			})
-		).toBe('bezier((0,0), (1,0), (0.25,0.5), (0.75,0.5), stroke: 0.2pt + black)');
+		).toBe('bezier((0,0), (1,0), (0.25,0.5), (0.75,0.5), stroke: 0.4pt + black)');
 	});
 
 	it('exports closed CeTZ paths with a closing line', () => {
@@ -116,7 +116,7 @@ describe('TikZ exporter', () => {
 					format: 'cetz'
 				}
 			)
-		).toContain('line((1,0), (0,0), stroke: 0.2pt + black)');
+		).toContain('line((1,0), (0,0), stroke: 0.4pt + black)');
 	});
 
 	it('omits redundant CeTZ closing lines when the last endpoint already equals the start', () => {

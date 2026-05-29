@@ -41,7 +41,7 @@
 			: selectedCurves[0].stroke;
 	});
 	let selectedCurveCommonStrokeWidth = $derived.by(() => {
-		if (!selectedCurves.length) return 2;
+		if (!selectedCurves.length) return 0.4;
 		const firstWidth = selectedCurves[0].strokeWidth;
 		return selectedCurves.every((curve) => curve.strokeWidth === firstWidth)
 			? firstWidth
@@ -136,12 +136,12 @@
 				/>
 			</label>
 			<label class="mt-3 block text-xs text-zinc-600">
-				线宽 {selectedCurveCommonStrokeWidth}px{selectedCurveCount > 1 ? '（批量）' : ''}
+				线宽 {selectedCurveCommonStrokeWidth}pt{selectedCurveCount > 1 ? '（批量）' : ''}
 				<input
 					class="mt-1 w-full"
-					max="20"
-					min="1"
-					step="1"
+					max="5"
+					min="0.1"
+					step="0.1"
 					type="range"
 					value={selectedCurveCommonStrokeWidth}
 					onchange={(event) =>

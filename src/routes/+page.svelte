@@ -104,12 +104,12 @@
 	let precision = $state(3);
 	let exportFormat = $state<ExportFormat>('tikz');
 	let stroke = $state('#111827');
-	let strokeWidth = $state(2);
-	let simplifyTolerance = $state(2);
+	let strokeWidth = $state(0.4);
+	let simplifyTolerance = $state(2.5);
 	let smoothDrawnPath = $state(true);
 	let snapToGridPoints = $state(false);
 	let snapClosedPaths = $state(false);
-	let closedPathSnapDistance = $state(18);
+	let closedPathSnapDistance = $state(15);
 	let showGrid = $state(true);
 	let leftPanelWidth = $state(240);
 	let rightPanelWidth = $state(360);
@@ -155,6 +155,7 @@
 		return activeTool === 'pan' ? 'cursor-pan-tool' : 'cursor-crosshair';
 	});
 	let overlayStatus = $derived(snapPreviewStatus ? `${status} | ${snapPreviewStatus}` : status);
+	const screenPixelsPerPoint = 96 / 72;
 
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -231,7 +232,8 @@
 				simplifyTolerance,
 				smoothDrawnPath,
 				snapToGridPoints,
-				closedPathSnapDistance
+				closedPathSnapDistance,
+				closedPathSnapDistanceUnit: 'pt'
 			})
 		);
 	}
@@ -247,14 +249,19 @@
 				smoothDrawnPath?: boolean;
 				snapToGridPoints?: boolean;
 				closedPathSnapDistance?: number;
+				closedPathSnapDistanceUnit?: 'px' | 'pt';
 			};
 			simplifyTolerance = clamp(parsed.simplifyTolerance ?? simplifyTolerance, 0, 5);
 			smoothDrawnPath = parsed.smoothDrawnPath ?? smoothDrawnPath;
 			snapToGridPoints = parsed.snapToGridPoints ?? snapToGridPoints;
+			const storedSnapDistance =
+				parsed.closedPathSnapDistanceUnit === 'pt'
+					? (parsed.closedPathSnapDistance ?? closedPathSnapDistance)
+					: (parsed.closedPathSnapDistance ?? closedPathSnapDistance) / screenPixelsPerPoint;
 			closedPathSnapDistance = clamp(
-				parsed.closedPathSnapDistance ?? closedPathSnapDistance,
-				5,
-				50
+				storedSnapDistance,
+				4,
+				38
 			);
 		} catch {
 			localStorage.removeItem('tikz-curve-digitizer:brush-settings');
@@ -485,10 +492,7 @@
 
 	function isPointModeDoubleClick(point: Point) {
 		const now = Date.now();
-		const isDoubleClick =
-			!!pointModeLastClickPoint &&
-			now - pointModeLastClickAt <= 300 &&
-			distanceBetween(pointModeLastClickPoint, point) <= 8 / (paper?.view.zoom ?? 1);
+		const isDoubleClick = !!pointModeLastClickPoint && now - pointModeLastClickAt <= 200;
 		pointModeLastClickAt = now;
 		pointModeLastClickPoint = point;
 		return isDoubleClick;
@@ -672,7 +676,7 @@
 	}
 
 	function getSnapRadius() {
-		return closedPathSnapDistance / (paper?.view.zoom ?? 1);
+		return (closedPathSnapDistance * screenPixelsPerPoint) / (paper?.view.zoom ?? 1);
 	}
 
 	function getOrCreateLayer(name: string) {
@@ -2314,6 +2318,10 @@
 					return;
 				}
 				const snappedPoint = getSnappedBrushPoint(point);
+				if (isPointModeDoubleClick(snappedPoint)) {
+					commitPointModeCurve();
+					return;
+				}
 				const gridSnap = getGridPointSnapState(point);
 				if (
 					gridSnap.eligible &&
@@ -2327,9 +2335,6 @@
 					clearClosedPathSnapPreview();
 				}
 				addPointModeAnchor(snappedPoint);
-				if (isPointModeDoubleClick(snappedPoint)) {
-					commitPointModeCurve();
-				}
 				return;
 			}
 			const handle = activeTool === 'pan' ? hitCalibrationHandle(point) : null;

@@ -25,8 +25,15 @@
 		<input bind:value={stroke} class="mt-1 h-9 w-full" type="color" />
 	</label>
 	<label class="block text-xs text-zinc-600">
-		线宽 {strokeWidth}px
-		<input bind:value={strokeWidth} class="mt-1 w-full" max="20" min="1" type="range" />
+		线宽 {strokeWidth}pt
+		<input
+			bind:value={strokeWidth}
+			class="mt-1 w-full"
+			max="5"
+			min="0.1"
+			step="0.1"
+			type="range"
+		/>
 	</label>
 	<label class="block text-xs text-zinc-600">
 		简化容差 {simplifyTolerance}
@@ -52,14 +59,14 @@
 		开启闭合路径吸附
 	</label>
 	<label class="block text-xs text-zinc-600">
-		吸附阈值 {closedPathSnapDistance}px
+		吸附阈值 {closedPathSnapDistance}pt
 		<input
 			bind:value={closedPathSnapDistance}
 			class="mt-1 w-full"
 			disabled={!snapClosedPaths && !snapToGridPoints}
-			max="50"
-			min="5"
-			step="1"
+			max="38"
+			min="4"
+			step="0.5"
 			type="range"
 		/>
 	</label>
