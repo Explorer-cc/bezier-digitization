@@ -19,9 +19,9 @@
 	} = $props();
 
 	const tools: Array<{ id: ToolMode; label: string; icon: typeof Pencil }> = [
+		{ id: 'pan', label: '移动', icon: Hand },
 		{ id: 'brush', label: '画笔', icon: Pencil },
-		{ id: 'point', label: '描点', icon: Pencil },
-		{ id: 'pan', label: '移动', icon: Hand }
+		{ id: 'point', label: '描点', icon: Pencil }
 	];
 </script>
 

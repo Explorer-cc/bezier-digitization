@@ -115,7 +115,7 @@
 	let snapAngleTolerance = $state(10);
 	let closedPathSnapDistance = $state(15);
 	let showGrid = $state(true);
-	let leftPanelWidth = $state(240);
+	let leftPanelWidth = $state(296);
 	let rightPanelWidth = $state(360);
 	let leftPanelCollapsed = $state(false);
 	let rightPanelCollapsed = $state(false);
@@ -165,67 +165,6 @@
 
 	function clampLeftPanelWidth(value: number) {
 		return clamp(value, leftPanelMinWidth, leftPanelMaxWidth);
-	}
-
-	function persistPanelLayout() {
-		if (!browser) return;
-		localStorage.setItem(
-			'tikz-curve-digitizer:panel-layout',
-			JSON.stringify({
-				left: leftPanelWidth,
-				right: rightPanelWidth,
-				leftCollapsed: leftPanelCollapsed,
-				rightCollapsed: rightPanelCollapsed
-			})
-		);
-	}
-
-	function loadPanelLayout() {
-		if (!browser) return;
-		const raw =
-			localStorage.getItem('tikz-curve-digitizer:panel-layout') ??
-			localStorage.getItem('tikz-curve-digitizer:panel-widths');
-		if (!raw) return;
-
-		try {
-			const parsed = JSON.parse(raw) as {
-				left?: number;
-				right?: number;
-				leftCollapsed?: boolean;
-				rightCollapsed?: boolean;
-			};
-			leftPanelWidth = clampLeftPanelWidth(parsed.left ?? leftPanelWidth);
-			rightPanelWidth = clamp(parsed.right ?? rightPanelWidth, 300, 620);
-			leftPanelCollapsed = parsed.leftCollapsed ?? leftPanelCollapsed;
-			rightPanelCollapsed = parsed.rightCollapsed ?? rightPanelCollapsed;
-		} catch {
-			localStorage.removeItem('tikz-curve-digitizer:panel-layout');
-		}
-	}
-
-	function persistRightPanelLayout() {
-		if (!browser) return;
-		localStorage.setItem(
-			'tikz-curve-digitizer:right-panel-layout',
-			JSON.stringify({
-				curvesHeight: rightCurvesPanelHeight
-			})
-		);
-	}
-
-	function loadRightPanelLayout() {
-		if (!browser) return;
-		const raw = localStorage.getItem('tikz-curve-digitizer:right-panel-layout');
-		if (!raw) return;
-
-		try {
-			const parsed = JSON.parse(raw) as {
-				curvesHeight?: number;
-			};
-			rightCurvesPanelHeight = clamp(parsed.curvesHeight ?? rightCurvesPanelHeight, 120, 520);
-		} catch {
-			localStorage.removeItem('tikz-curve-digitizer:right-panel-layout');
-		}
 	}
 
 	function persistBrushSettings() {
@@ -1564,7 +1503,6 @@
 		window.removeEventListener('pointerup', stopPanelResize);
 		window.removeEventListener('pointercancel', stopPanelResize);
 		scheduleCanvasResize();
-		persistPanelLayout();
 	}
 
 	function startRightSectionResize(event: PointerEvent) {
@@ -1606,7 +1544,6 @@
 		window.removeEventListener('pointermove', handleRightSectionResize);
 		window.removeEventListener('pointerup', stopRightSectionResize);
 		window.removeEventListener('pointercancel', stopRightSectionResize);
-		persistRightPanelLayout();
 	}
 
 	function togglePanel(panel: 'left' | 'right', event: MouseEvent) {
@@ -1617,7 +1554,6 @@
 			rightPanelCollapsed = !rightPanelCollapsed;
 		}
 		scheduleCanvasResize();
-		persistPanelLayout();
 	}
 
 	function segmentsFromPath(path: PaperPath): CubicBezierSegment[] {
@@ -2497,8 +2433,6 @@
 	}
 
 	onMount(async () => {
-		loadPanelLayout();
-		loadRightPanelLayout();
 		loadBrushSettings();
 		window.addEventListener('keydown', handleShortcutKeydown);
 		const paperModule = (await import('paper')).default;

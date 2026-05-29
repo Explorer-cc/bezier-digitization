@@ -54,7 +54,7 @@
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={smoothDrawnPath} type="checkbox" />
-		平滑路径
+		自动平滑路径
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapToGridPoints} type="checkbox" />
@@ -73,7 +73,7 @@
 		相邻控制点共线吸附
 	</label>
 	<label class="block text-xs text-zinc-600">
-		吸附阈值 {closedPathSnapDistance}pt
+		自动吸附阈值 {closedPathSnapDistance}pt
 		<input
 			bind:value={closedPathSnapDistance}
 			class="mt-1 w-full"
@@ -85,7 +85,7 @@
 		/>
 	</label>
 	<label class="block text-xs text-zinc-600">
-		吸附角度 {snapAngleTolerance}°
+		自动吸附角度 {snapAngleTolerance}°
 		<input
 			bind:value={snapAngleTolerance}
 			class="mt-1 w-full"
