@@ -19,14 +19,14 @@ The immediate product direction is browser-first. Do not add Electron, Tauri, or
 ```text
 src/
   components/
-    BrushSettings.svelte        # Brush color, width, simplify, smoothing, and snap controls.
+    BrushSettings.svelte        # Brush color, pt width, simplify, smoothing, and snap controls.
     CalibrationSettings.svelte  # Unit length input and grid display toggle.
     CanvasWorkspace.svelte      # Canvas element with status overlay and reset-view button.
     CurveListPanel.svelte       # Curve list with multi-selection, delete, and clear actions.
     ExportPanel.svelte          # Export format selector, precision, code output, and download.
-    Header.svelte               # App title, image upload button, and copy-export button.
+    Header.svelte               # App title and image upload button.
     ObjectPropertiesPanel.svelte # Shared object-properties UI for image and curve objects.
-    Toolbar.svelte              # Tool mode buttons and undo/redo controls.
+    Toolbar.svelte              # Move, brush, point, undo, and redo controls.
   routes/
     +layout.svelte       # Imports global CSS and favicon.
     +page.svelte         # Paper.js canvas lifecycle, state management, and component orchestration.
@@ -53,8 +53,8 @@ Generated or environment-specific folders such as `.svelte-kit`, `.vercel`, `.pn
 The main screen is orchestrated by `src/routes/+page.svelte`, which owns the Paper.js canvas lifecycle and all application state. The UI has been extracted into eight Svelte components under `src/components/`:
 
 - `Header.svelte` — app title bar and image upload button.
-- `Toolbar.svelte` — brush/pan tool switching and undo/redo buttons (pan label: "移动").
-- `BrushSettings.svelte` — brush color, width, simplify tolerance, smoothing, and all snap controls (uses `$bindable` for two-way state binding).
+- `Toolbar.svelte` — move/brush/point tool switching and undo/redo buttons (pan label: "移动"; move is the default tool and appears first).
+- `BrushSettings.svelte` — brush color, pt-based width, simplify tolerance, automatic smoothing, and snap controls (uses `$bindable` for two-way state binding).
 - `CalibrationSettings.svelte` — real unit length input and grid display toggle.
 - `CanvasWorkspace.svelte` — canvas element with status overlay and reset-view button (exposes `canvas` and `hostElement` refs via `$bindable`).
 - `ObjectPropertiesPanel.svelte` — shared property editor for selected images and curves.
@@ -83,6 +83,14 @@ Already implemented for that goal:
 - Holding `Shift` while resizing an image preserves the current aspect ratio, including for rotated images.
 - A point-by-point tracing mode is available for constructing cubic Bezier paths by successive clicks.
 - Point mode supports grid snapping and endpoint close snapping; snapping back to the first point auto-closes the path and exits to move mode.
+- Point mode double-click completion uses a 200ms time window only; the finishing click does not add an extra anchor.
+- Curve control-handle dragging supports optional vertical/horizontal snapping and adjacent-control-point collinearity snapping, with a shared configurable angle tolerance.
+- Angle-based control-point snapping shows a light-green dashed guide line through the anchor, extended to the current viewport edges.
+- Brush and curve stroke widths are pt-based. The default stroke width is `0.4pt`, and UI sliders currently cap at `3pt`.
+- Distance-based snapping uses a pt-based threshold. The default automatic snap threshold is `15pt`.
+- Angle-based snapping uses a separate automatic snap angle slider, defaulting to `10°` with a `5°` to `30°` range.
+- Closed-path snapping is enabled by default.
+- Side panel width/collapse state and right-panel section height are not persisted in localStorage; refreshes return to fixed defaults.
 - The right-side curve list now scrolls vertically when the number of curves exceeds the panel height.
 
 Still remaining for that goal:
@@ -130,7 +138,7 @@ Already present in some form:
 - Closed-path snapping by endpoint proximity.
 - Closed-path snap preview indicator while drawing.
 - Grid-point snapping to calibrated integer coordinate intersections.
-- Local persistence for brush post-processing and snap settings.
+- Local persistence for brush post-processing and snap settings, excluding side-panel layout.
 - Reference image object selection, movement, 8-handle resizing, rotation, opacity control, locking, fit-to-canvas, and reset-transform actions.
 - Equal-aspect image resize with `Shift` modifier.
 - Keyboard deletion of the selected reference image.
@@ -139,6 +147,12 @@ Already present in some form:
 - Batch stroke-color and stroke-width editing for multiple selected curves.
 - Point-by-point cubic path construction mode with double-click completion.
 - Point mode closed-path snapping to the first point.
+- Point mode double-click completion uses a 200ms time window and does not add the second click as an extra anchor.
+- Pt-based stroke-width editing and export (`0.4pt` default, `3pt` UI slider maximum).
+- Pt-based distance snap threshold (`15pt` default).
+- Configurable angle snap tolerance (`10°` default, `5°` to `30°`).
+- Optional vertical/horizontal control-point snapping with a light-green viewport-spanning dashed guide line.
+- Optional adjacent-control-point collinearity snapping with the same light-green guide line.
 - Right-side curve list vertical scrolling for large curve counts.
 
 Still incomplete or not yet implemented:
@@ -175,6 +189,8 @@ Defer until the core workflow is stable:
 - The snap-preview circle must use the same screen-pixel threshold mapped into project coordinates as the actual closed-path snapping logic.
 - Grid-point snapping must use the same threshold radius and preview-circle style as closed-path snapping.
 - If both grid snapping and closed-path snapping are eligible during brush drawing, grid-point snapping currently takes precedence for the live sampled point and preview.
+- Distance-based snap threshold and angle-based snap tolerance are separate controls; do not reuse the distance threshold for control-point angle snapping.
+- Control-point angle snap previews should remain transient Paper.js preview-layer graphics and must not mutate stored curve data beyond the committed dragged handle position.
 - Reference images should remain on their own Paper.js layer and stay visually above curves and calibration graphics.
 
 Core geometry types currently include:
@@ -261,4 +277,5 @@ Before finishing non-trivial code changes, run the narrowest relevant command fi
 - When changing closed-path snapping, keep the behavior symmetric between canvas state and all export formats.
 - If adding snap previews, prefer lightweight Paper.js overlay state instead of mutating stored curve data before commit.
 - If adding the snap-preview circle, use the same threshold value that drives actual snapping so the preview remains trustworthy.
+- Do not reintroduce side-panel layout persistence without an explicit request; the current behavior intentionally resets side panel layout on refresh.
 - Keep generated files, dependency folders, and build outputs out of manual edits.

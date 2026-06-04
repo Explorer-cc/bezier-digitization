@@ -34,6 +34,12 @@ Already implemented toward that goal:
 - [x] Closed-path snapping works during curve anchor dragging: dragging the first or last anchor near the opposite endpoint snaps and auto-closes the curve.
 - [x] Point-by-point tracing mode is implemented for cubic Bezier path construction.
 - [x] Point mode supports grid snapping, double-click completion, and snapping back to the first point to auto-close the path.
+- [x] Point mode double-click completion now uses a 200ms time window and does not add the finishing click as an extra anchor.
+- [x] Control-point editing supports optional vertical/horizontal snapping and adjacent-control-point collinearity snapping with a configurable angle tolerance.
+- [x] Angle-based control-point snapping shows a light-green dashed guide line through the anchor, extended to the current viewport edges.
+- [x] Stroke width is pt-based (`0.4pt` default, `3pt` slider maximum), and export styles use the pt value directly.
+- [x] Distance snapping uses a pt-based automatic snap threshold (`15pt` default), separate from angle snapping.
+- [x] Side panel layout persistence was removed; left/right widths, collapsed state, and right-panel section height reset to fixed defaults on refresh.
 - [x] Component extraction completed with eight UI components under `src/components/`:
   - Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
 - [x] Right-side panel drag separator no longer overlaps the curve list panel (added `shrink-0 overflow-hidden` to curve list wrapper).
@@ -157,7 +163,7 @@ Still remaining for this goal:
   - each `.. controls ..` segment on its own line
 - [x] Negative-zero formatting fixed for rounded export numbers.
 - [x] Closed-path snapping toggle added for brush drawing.
-- [x] Closed-path snapping threshold slider added in the left panel.
+- [x] Closed-path snapping threshold slider added in the left panel; the threshold is pt-based and defaults to `15pt`.
 - [x] Closed-path snapping now closes by endpoint snap only and does not resmooth the whole path.
 - [x] Closed-path snap preview circle implemented on the live brush endpoint.
 - [x] Grid-point snapping implemented for brush drawing.
@@ -168,7 +174,7 @@ Still remaining for this goal:
 - [x] Point-mode path construction added:
   - successive click-to-add anchors
   - default cubic control handles for each segment
-  - double-click to finish and switch back to move mode
+  - 200ms double-click to finish and switch back to move mode without adding the finishing click as an extra anchor
   - `Escape` to cancel an unfinished draft
   - closed-path snapping back to the first point
 - [x] Closed curves are exported distinctly in all formats.
@@ -178,13 +184,17 @@ Still remaining for this goal:
 - [x] Brush post-processing settings persisted in `localStorage`.
 - [x] Snap settings persisted in `localStorage`:
   - grid snapping toggle
-  - snap threshold
+  - closed-path snapping toggle
+  - automatic distance snap threshold
+  - automatic angle snap tolerance
+  - vertical/horizontal and adjacent-control-point angle snap toggles
 - [x] Right-side vertical layout improved:
   - top and bottom drag handles move the fixed-height export-settings block
   - export-settings block height adapts to smaller viewport heights
   - code-output block fills remaining space
-- [x] Left panel default width reduced.
-- [x] Brush width slider range adjusted to `1px` to `20px`.
+- [x] Side panel layout no longer persists in `localStorage`; refreshes use fixed defaults.
+- [x] Left panel default width is `296px`.
+- [x] Brush and object stroke-width sliders use `pt`, default to `0.4pt`, and cap at `3pt`.
 - [x] Reset view now centers the calibrated origin in the viewport.
 - [x] Reset-view button moved away from the bottom edge to reduce small-window clipping risk.
 - [x] Small-viewport constraints tightened:
@@ -201,7 +211,7 @@ Still remaining for this goal:
 - [x] `.gitignore` and `.prettierignore` updated for local store, generated files, logs, and build output.
 - [x] Right-side curve list panel wrapper given `shrink-0 overflow-hidden` so the ExportPanel cannot overlap it when the drag separator is moved upward.
 - [x] Curve list panel height chain fixed so only the list area scrolls when many curves are present.
-- [x] Toolbar pan label changed from "平移" to "移动".
+- [x] Toolbar pan label changed from "平移" to "移动"; move mode is the default tool and appears before brush.
 - [x] Copy-code and download buttons consolidated into the ExportPanel code output header (moved from Header).
 - [x] Header no longer contains the copy-export button; it only has title and image upload.
 
@@ -246,13 +256,12 @@ Still remaining for this goal:
 ### 1. Refactor MVP UI Into Components
 
 - [x] Add resizable left and right side panels before component extraction:
-  - left panel default width: `280px`
+  - left panel default width: `296px`
   - right panel default width: `360px`
   - drag handles between left/canvas and canvas/right
   - clamp panel widths to usable min/max values
-  - persist widths in `localStorage`
 - [x] Add side panel collapse and expand buttons on the resize handles.
-- [x] Persist collapsed side panel state in `localStorage`.
+- [x] Side panel layout persistence removed; widths, collapsed state, and right-panel section height reset on refresh.
 - [x] Create `src/components/Header.svelte`.
 - [x] Create `src/components/Toolbar.svelte`.
 - [x] Create `src/components/BrushSettings.svelte`.
@@ -280,6 +289,7 @@ Still remaining for this goal:
   - simplify tolerance
   - smoothing toggle
   - snap settings
+  - panel layout intentionally excluded
 
 ### 3. Improve Reference Image Handling
 
@@ -302,6 +312,8 @@ Still remaining for this goal:
 - [x] Let users drag anchors and control handles.
 - [x] Grid-point snapping for curve anchors and control handles during drag, with green preview circle.
 - [x] Closed-path snapping for curve anchor dragging: dragging first or last anchor near opposite endpoint snaps and auto-closes the curve.
+- [x] Vertical/horizontal control-point snapping with configurable angle tolerance and viewport-spanning light-green guide line.
+- [x] Adjacent-control-point collinearity snapping in same-direction and opposite-direction cases, with the same guide line.
 - [x] Add curve rename.
 - [x] Add curve color and stroke width editing after creation.
 - [x] Add undo/redo for drawing.
@@ -329,6 +341,9 @@ Still remaining for this goal:
 ### 7. Improve Snapping
 
 - [ ] Add visual priority rules or UI hints when grid snapping and closed-path snapping compete.
+- [x] Add configurable automatic snap angle (`5°` to `30°`, default `10°`) for angle-based control-point snapping.
+- [x] Keep distance snap threshold and angle snap tolerance as separate controls.
+- [x] Add light-green dashed viewport-spanning guide lines for angle-based control-point snapping.
 - [ ] Consider optional snapping to axis lines without requiring full grid-point snapping.
 - [ ] Consider optional snapping to major grid intervals rather than only integer coordinates.
 - [ ] Add tests for snap-radius consistency across zoom levels.
@@ -355,6 +370,12 @@ Still remaining for this goal:
 - [ ] Create `src/lib/i18n/index.ts`.
 - [ ] Create `src/lib/i18n/locales/zh.json`.
 - [ ] Create `src/lib/i18n/locales/en.json`.
+- [ ] Initialize `svelte-i18n` from `src/routes/+layout.svelte`, defaulting to Chinese.
+- [ ] Add a Chinese/English language toggle button to `Header.svelte`, positioned to the right of the upload-image button.
+- [ ] Persist the selected locale in `localStorage` so refreshes keep the chosen language.
+- [ ] Replace static component text with translation keys across Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, CurveListPanel, ObjectPropertiesPanel, and ExportPanel.
+- [ ] Replace `+page.svelte` status and operation feedback strings with translated messages, including dynamic values such as selected count, segment count, snap coordinates, and file names.
+- [ ] Ensure language switching updates currently visible text without requiring a page reload.
 - [ ] Replace hard-coded UI text with translation keys.
 - [ ] Default to Chinese UI.
 
