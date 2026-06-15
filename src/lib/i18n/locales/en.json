@@ -11,6 +11,20 @@
 	"header": {
 		"uploadImage": "Upload image"
 	},
+	"imageUpload": {
+		"title": "Import Reference Image",
+		"description": "Add an image to start tracing and coordinate calibration",
+		"close": "Close image upload dialog",
+		"dropZoneLabel": "Drop, paste, or choose an image file",
+		"dropHere": "Drop an image here",
+		"releaseToUpload": "Release to import the image",
+		"formats": "Supports PNG, JPEG, WebP, GIF, and other common image formats",
+		"or": "or",
+		"chooseFile": "Choose image",
+		"pasteHint": "You can also paste an image from the clipboard",
+		"invalidFile": "Choose or drop a valid image file",
+		"clipboardEmpty": "No usable image found in the clipboard"
+	},
 	"toolbar": {
 		"title": "Tools",
 		"pan": "Move",
@@ -47,8 +61,8 @@
 		"opacity": "Opacity {value}%",
 		"locked": "Locked",
 		"unlocked": "Unlocked",
-		"fitToCanvas": "Fit to canvas",
-		"resetTransform": "Reset transform",
+		"fitToCanvas": "Fit Canvas",
+		"resetTransform": "Reset",
 		"selectedPaths": "{count} paths selected",
 		"pathObject": "Path object",
 		"bezierSegmentCount": "Bezier segments {count}",

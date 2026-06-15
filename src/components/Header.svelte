@@ -1,19 +1,22 @@
 <script lang="ts">
 	import { Image as ImageIcon } from '@lucide/svelte';
+	import { tick } from 'svelte';
 	import { _ } from 'svelte-i18n';
+	import ImageUploadDialog from './ImageUploadDialog.svelte';
 	import LanguageSwitcher from './LanguageSwitcher.svelte';
 
 	let {
-		onFileChange
+		onSelectImageFile
 	}: {
-		onFileChange: (event: Event) => void;
+		onSelectImageFile: (file: File) => void;
 	} = $props();
 
-	let fileInput: HTMLInputElement;
+	let uploadButton: HTMLButtonElement;
+	let uploadDialogOpen = $state(false);
 
-	function handleLocalFileChange(event: Event) {
-		onFileChange(event);
-		fileInput.value = '';
+	function closeUploadDialog() {
+		uploadDialogOpen = false;
+		void tick().then(() => uploadButton?.focus());
 	}
 </script>
 
@@ -24,16 +27,10 @@
 	</div>
 	<div class="flex items-center gap-2">
 		<LanguageSwitcher />
-		<input
-			bind:this={fileInput}
-			class="hidden"
-			type="file"
-			accept="image/*"
-			onchange={handleLocalFileChange}
-		/>
 		<button
+			bind:this={uploadButton}
 			class="inline-flex h-9 items-center gap-2 rounded border border-zinc-300 bg-white px-3 text-sm hover:bg-zinc-50"
-			onclick={() => fileInput.click()}
+			onclick={() => (uploadDialogOpen = true)}
 			type="button"
 		>
 			<ImageIcon size={16} />
@@ -41,3 +38,9 @@
 		</button>
 	</div>
 </header>
+
+<ImageUploadDialog
+	open={uploadDialogOpen}
+	onClose={closeUploadDialog}
+	onSelectFile={onSelectImageFile}
+/>

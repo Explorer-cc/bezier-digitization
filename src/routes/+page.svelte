@@ -2451,10 +2451,8 @@
 		drawCalibration();
 	}
 
-	function handleFileChange(event: Event) {
-		const target = event.target as HTMLInputElement;
-		const file = target.files?.[0];
-		if (file) void loadImage(file);
+	function handleImageFile(file: File) {
+		void loadImage(file);
 	}
 
 	function handleWheel(event: WheelEvent) {
@@ -2924,7 +2922,7 @@
 </svelte:head>
 
 <main class="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-950">
-	<Header onFileChange={handleFileChange} />
+	<Header onSelectImageFile={handleImageFile} />
 
 	<div class="grid min-h-0 flex-1" style:grid-template-columns={workspaceGridColumns}>
 		<aside
