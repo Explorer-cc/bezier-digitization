@@ -264,6 +264,16 @@ pnpm test
 pnpm build
 ```
 
+When Codex runs the development server, run it with escalated execution rather than the default sandbox. Vite/SvelteKit writes startup caches under `.svelte-kit` and `node_modules/.vite`, and sandboxed runs can fail with `EPERM: operation not permitted`. This is a Codex execution-permission requirement, not a requirement for users to run PowerShell as Administrator.
+
+Preferred Codex dev-server command:
+
+```powershell
+pnpm dev -- --host 127.0.0.1 --port 5189 --strictPort
+```
+
+For Codex tool calls, request `sandbox_permissions: "require_escalated"` when running this command and use a short justification such as: "Need to start the Vite dev server outside the sandbox because SvelteKit writes startup cache files."
+
 Before finishing non-trivial code changes, run the narrowest relevant command first, then broader checks when practical. For core geometry/export changes, run `pnpm test` at minimum.
 
 ## Coding Guidance

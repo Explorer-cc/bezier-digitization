@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Copy, Download } from '@lucide/svelte';
 	import type { ExportFormat } from '$lib/core/types';
+	import { _ } from 'svelte-i18n';
 
 	let {
 		exportFormat,
@@ -36,7 +37,7 @@
 <div
 	role="separator"
 	aria-orientation="horizontal"
-	aria-label="调整曲线区域高度"
+	aria-label={$_('export.resizeCurvesPanel')}
 	class={`h-2 shrink-0 cursor-row-resize border-y border-zinc-200 bg-zinc-100 transition-colors hover:bg-blue-200 ${
 		resizing ? 'bg-blue-300' : ''
 	}`}
@@ -48,9 +49,9 @@
 	style:height={`${settingsHeight}px`}
 >
 	<div class="h-full overflow-y-auto p-4">
-		<h2 class="text-sm font-semibold">导出设置</h2>
+		<h2 class="text-sm font-semibold">{$_('export.settings')}</h2>
 		<div class="mt-3">
-			<div class="text-xs text-zinc-600">导出格式</div>
+			<div class="text-xs text-zinc-600">{$_('export.format')}</div>
 			<div class="mt-1 grid grid-cols-3 gap-1">
 				{#each exportFormats as format (format.id)}
 					<button
@@ -68,7 +69,7 @@
 			</div>
 		</div>
 		<label class="mt-3 block text-xs text-zinc-600">
-			小数位数
+			{$_('export.precision')}
 			<input
 				class="mt-1 h-9 w-full rounded border border-zinc-300 px-2 text-sm"
 				max="6"
@@ -85,7 +86,7 @@
 <div
 	role="separator"
 	aria-orientation="horizontal"
-	aria-label="调整代码输出区域高度"
+	aria-label={$_('export.resizeCodePanel')}
 	class={`h-2 shrink-0 cursor-row-resize border-y border-zinc-200 bg-zinc-100 transition-colors hover:bg-blue-200 ${
 		resizing ? 'bg-blue-300' : ''
 	}`}
@@ -95,7 +96,7 @@
 <section class="flex min-h-0 flex-1 flex-col overflow-hidden">
 	<div class="flex h-full min-h-0 flex-col p-4">
 		<div class="flex items-center justify-between">
-			<h2 class="text-sm font-semibold">代码输出</h2>
+			<h2 class="text-sm font-semibold">{$_('export.codeOutput')}</h2>
 			<div class="flex items-center gap-2">
 				<button
 					class="inline-flex h-8 items-center gap-2 rounded bg-zinc-950 px-2 text-xs text-white hover:bg-zinc-800"
@@ -103,7 +104,7 @@
 					type="button"
 				>
 					<Copy size={14} />
-					复制
+					{$_('export.copy')}
 				</button>
 				<button
 					class="inline-flex h-8 items-center gap-2 rounded border border-zinc-300 px-2 text-xs"
@@ -111,7 +112,7 @@
 					type="button"
 				>
 					<Download size={14} />
-					下载
+					{$_('export.download')}
 				</button>
 			</div>
 		</div>

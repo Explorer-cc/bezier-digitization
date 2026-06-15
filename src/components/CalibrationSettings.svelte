@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { _ } from 'svelte-i18n';
+
 	let {
 		unitRealLength,
 		showGrid,
@@ -13,9 +15,9 @@
 </script>
 
 <section class="mt-6 space-y-3">
-	<h2 class="text-sm font-semibold">坐标校准</h2>
+	<h2 class="text-sm font-semibold">{$_('calibration.title')}</h2>
 	<label class="block text-xs text-zinc-600">
-		真实单位长度
+		{$_('calibration.unitRealLength')}
 		<input
 			class="mt-1 h-9 w-full rounded border border-zinc-300 px-2 text-sm"
 			min="0.0001"
@@ -32,6 +34,6 @@
 			onchange={(event) => onUpdateShowGrid((event.currentTarget as HTMLInputElement).checked)}
 			type="checkbox"
 		/>
-		显示坐标网格
+		{$_('calibration.showGrid')}
 	</label>
 </section>

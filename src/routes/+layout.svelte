@@ -1,6 +1,11 @@
 <script lang="ts">
+	import { initializeI18n, restoreStoredLocale } from '$lib/i18n';
+	import { onMount } from 'svelte';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
+
+	initializeI18n();
+	onMount(restoreStoredLocale);
 
 	let { children } = $props();
 </script>

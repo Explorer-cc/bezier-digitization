@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Image as ImageIcon } from '@lucide/svelte';
+	import { _ } from 'svelte-i18n';
+	import LanguageSwitcher from './LanguageSwitcher.svelte';
 
 	let {
 		onFileChange
@@ -17,10 +19,11 @@
 
 <header class="flex h-14 items-center justify-between border-b border-zinc-300 bg-white px-4 shrink-0">
 	<div>
-		<h1 class="text-base font-semibold">Bezier Curve Digitizer</h1>
-		<p class="text-xs text-zinc-500">图片描线、坐标校准、多格式 Bezier 路径导出</p>
+		<h1 class="text-base font-semibold">{$_('app.title')}</h1>
+		<p class="text-xs text-zinc-500">{$_('app.subtitle')}</p>
 	</div>
 	<div class="flex items-center gap-2">
+		<LanguageSwitcher />
 		<input
 			bind:this={fileInput}
 			class="hidden"
@@ -34,7 +37,7 @@
 			type="button"
 		>
 			<ImageIcon size={16} />
-			上传图片
+			{$_('header.uploadImage')}
 		</button>
 	</div>
 </header>

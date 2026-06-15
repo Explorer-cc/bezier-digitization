@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { _ } from 'svelte-i18n';
+
 	let {
 		canvasReady,
 		overlayStatus,
@@ -29,7 +31,7 @@
 		onclick={onResetView}
 		type="button"
 	>
-		重置视图
+		{$_('workspace.resetView')}
 	</button>
 	<canvas
 		bind:this={canvas}
@@ -40,7 +42,7 @@
 	></canvas>
 	{#if !canvasReady}
 		<div class="absolute inset-0 grid place-items-center text-sm text-zinc-500">
-			初始化画布...
+			{$_('workspace.initializing')}
 		</div>
 	{/if}
 </section>

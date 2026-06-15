@@ -32,6 +32,7 @@
 	import ObjectPropertiesPanel from '../components/ObjectPropertiesPanel.svelte';
 	import Toolbar from '../components/Toolbar.svelte';
 	import { onDestroy, onMount } from 'svelte';
+	import { _ } from 'svelte-i18n';
 
 	type PaperScope = paper.PaperScope;
 	type PaperPath = paper.Path;
@@ -45,6 +46,11 @@
 	type ImageResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 	type ImageHandle = 'move' | 'rotate' | ImageResizeHandle;
 	type ImageTransformSnapshot = Pick<CanvasImage, 'x' | 'y' | 'width' | 'height' | 'rotation'>;
+	type TranslationValues = Record<string, string | number | boolean | Date | null | undefined>;
+	type StatusDescriptor = {
+		key: string;
+		values?: TranslationValues;
+	};
 
 	let paper: PaperScope | null = null;
 	let canvas = $state<HTMLCanvasElement>();
@@ -127,8 +133,10 @@
 	let rightSectionResizeStartY = 0;
 	let rightSectionStartHeight = 0;
 	let canvasReady = $state(false);
-	let status = $state('选择图片或直接用画笔描曲线');
-	let snapPreviewStatus = $state('');
+	let statusKey = $state('status.ready');
+	let statusValues = $state<TranslationValues | undefined>();
+	let snapPreviewStatusKey = $state('');
+	let snapPreviewStatusValues = $state<TranslationValues | undefined>();
 	let hoverCanvasCursor = $state<string | null>(null);
 
 	let rightSettingsPanelHeight = $state(210);
@@ -158,6 +166,10 @@
 		if (hoverCanvasCursor) return hoverCanvasCursor;
 		return activeTool === 'pan' ? 'cursor-pan-tool' : 'cursor-crosshair';
 	});
+	let status = $derived($_(statusKey, { values: statusValues }));
+	let snapPreviewStatus = $derived(
+		snapPreviewStatusKey ? $_(snapPreviewStatusKey, { values: snapPreviewStatusValues }) : ''
+	);
 	let overlayStatus = $derived(snapPreviewStatus ? `${status} | ${snapPreviewStatus}` : status);
 	const screenPixelsPerPoint = 96 / 72;
 
@@ -309,10 +321,25 @@
 		return { x: point.x, y: point.y };
 	}
 
+	function setStatus(key: string, values?: TranslationValues) {
+		statusKey = key;
+		statusValues = values;
+	}
+
+	function setSnapPreviewStatus(key: string, values?: TranslationValues) {
+		snapPreviewStatusKey = key;
+		snapPreviewStatusValues = values;
+	}
+
+	function clearSnapPreviewStatus() {
+		snapPreviewStatusKey = '';
+		snapPreviewStatusValues = undefined;
+	}
+
 	function updateStatusForTool() {
-		if (activeTool === 'brush') status = '按住拖动画出曲线';
-		else if (activeTool === 'point') status = '逐点点击描出路径，双击完成';
-		else if (activeTool === 'pan') status = '拖动画布空白区域平移；也可拖动原点或单位点';
+		if (activeTool === 'brush') setStatus('status.brushTool');
+		else if (activeTool === 'point') setStatus('status.pointTool');
+		else if (activeTool === 'pan') setStatus('status.panTool');
 	}
 
 	function setTool(mode: ToolMode) {
@@ -430,7 +457,7 @@
 		const segments = buildSegmentsFromPoints(points);
 		const nextCurve: CurvePath = {
 			id: crypto.randomUUID(),
-			name: `Curve ${curves.length + 1}`,
+			name: $_('curves.defaultName', { values: { count: curves.length + 1 } }),
 			segments,
 			stroke,
 			strokeWidth,
@@ -440,7 +467,7 @@
 			curves = [...curves, nextCurve];
 			selectedCurveIds = [nextCurve.id];
 			selectedObject = { type: 'curve', id: nextCurve.id };
-		}, closed ? '已吸附到起点并闭合路径' : '已完成描点路径');
+		}, { key: closed ? 'status.closedPointPathCommitted' : 'status.pointPathCommitted' });
 		cancelPointModeDraft();
 		setTool('pan');
 		updateCurveSelectionStatus();
@@ -463,10 +490,11 @@
 		pointModeAnchors = nextAnchors;
 		pointModeHoverPoint = point;
 		updatePointModePreview(point);
-		status =
-			nextAnchors.length === 1
-				? '已落下起点，继续点击添加下一点'
-				: `已添加第 ${nextAnchors.length} 个描点，双击完成`;
+		if (nextAnchors.length === 1) {
+			setStatus('status.pointStartAdded');
+		} else {
+			setStatus('status.pointAnchorAdded', { count: nextAnchors.length });
+		}
 	}
 
 	function getCursorClassForImageHandle(handle: ImageResizeHandle) {
@@ -842,11 +870,14 @@
 
 	function updateCurveSelectionStatus() {
 		if (!selectedCurveIds.length) {
-			status = '已取消选择曲线';
+			setStatus('status.curveSelectionCleared');
 			return;
 		}
-		status =
-			selectedCurveIds.length === 1 ? '已选中曲线' : `已选择 ${selectedCurveIds.length} 条曲线`;
+		if (selectedCurveIds.length === 1) {
+			setStatus('status.curveSelected');
+		} else {
+			setStatus('status.curvesSelected', { count: selectedCurveIds.length });
+		}
 	}
 
 	function clearObjectSelection() {
@@ -975,7 +1006,7 @@
 
 	function commitEditorMutation(
 		mutate: () => void,
-		statusMessage?: string,
+		nextStatus?: StatusDescriptor,
 		options?: { suppressRender?: boolean }
 	) {
 		const before = createEditorSnapshot();
@@ -989,8 +1020,8 @@
 			redrawCurves();
 			drawObjectSelectionOverlay();
 		}
-		if (statusMessage) {
-			status = statusMessage;
+		if (nextStatus) {
+			setStatus(nextStatus.key, nextStatus.values);
 		}
 		return true;
 	}
@@ -999,7 +1030,7 @@
 		pendingEditSnapshot = createEditorSnapshot();
 	}
 
-	function finalizePendingEditHistory(statusMessage?: string) {
+	function finalizePendingEditHistory(nextStatus?: StatusDescriptor) {
 		if (!pendingEditSnapshot) return false;
 		const before = pendingEditSnapshot;
 		pendingEditSnapshot = null;
@@ -1007,8 +1038,8 @@
 		if (snapshotsEqual(before, after)) return false;
 		undoHistory = [...undoHistory, before];
 		redoHistory = [];
-		if (statusMessage) {
-			status = statusMessage;
+		if (nextStatus) {
+			setStatus(nextStatus.key, nextStatus.values);
 		}
 		return true;
 	}
@@ -1340,7 +1371,7 @@
 	function clearClosedPathSnapPreview() {
 		snapPreviewCircle?.remove();
 		snapPreviewCircle = null;
-		snapPreviewStatus = '';
+		clearSnapPreviewStatus();
 	}
 
 	function updateCollinearControlSnapPreview(guideStart: Point, guideEnd: Point) {
@@ -1386,7 +1417,10 @@
 			gridSnap.targetPoint &&
 			gridSnap.gridCoordinate
 		) {
-			snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+			setSnapPreviewStatus('status.gridSnap', {
+				x: gridSnap.gridCoordinate.x,
+				y: gridSnap.gridCoordinate.y
+			});
 			updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
 			return;
 		}
@@ -1397,7 +1431,7 @@
 			return;
 		}
 
-		snapPreviewStatus = '';
+		clearSnapPreviewStatus();
 		updateSnapPreviewCircle(closedSnap.end, closedSnap.snapRadius);
 	}
 
@@ -1424,7 +1458,7 @@
 			}
 		};
 		drawCalibration();
-		status = `原点已更新：${Math.round(point.x)}, ${Math.round(point.y)}`;
+		setStatus('status.originUpdated', { x: Math.round(point.x), y: Math.round(point.y) });
 	}
 
 	function updateUnitHandle(point: Point) {
@@ -1441,7 +1475,10 @@
 			unitRealLength: unitRealLength || 1
 		};
 		drawCalibration();
-		status = `单位长度已更新：${length.toFixed(1)} px = ${unitRealLength || 1}，坐标轴保持水平/垂直`;
+		setStatus('status.unitLengthUpdated', {
+			length: length.toFixed(1),
+			realLength: unitRealLength || 1
+		});
 	}
 
 	function updateUnitRealLength(value: number) {
@@ -1452,13 +1489,13 @@
 				...coordinateSystem,
 				unitRealLength: value
 			};
-		}, '已更新真实单位长度');
+		}, { key: 'status.unitRealLengthUpdated' });
 	}
 
 	function updateShowGrid(value: boolean) {
 		commitEditorMutation(() => {
 			showGrid = value;
-		}, value ? '已显示坐标网格' : '已隐藏坐标网格');
+		}, { key: value ? 'status.gridShown' : 'status.gridHidden' });
 	}
 
 	function startPanelResize(panel: 'left' | 'right', event: PointerEvent) {
@@ -1592,15 +1629,15 @@
 
 		const curve: CurvePath = {
 			id: crypto.randomUUID(),
-			name: `Curve ${curves.length + 1}`,
+			name: $_('curves.defaultName', { values: { count: curves.length + 1 } }),
 			segments,
 			stroke,
 			strokeWidth,
 			closed
 		};
 		const nextStatus = closed
-			? `已生成闭合 Bezier 曲线：${segments.length} 段`
-			: `已生成 ${segments.length} 段 Bezier 曲线`;
+			? { key: 'status.closedBezierCurveCreated', values: { count: segments.length } }
+			: { key: 'status.bezierCurveCreated', values: { count: segments.length } };
 		commitEditorMutation(
 			() => {
 				curves = [...curves, curve];
@@ -1699,7 +1736,7 @@
 
 			return { ...curve, segments };
 		});
-		status = '已更新路径锚点';
+		setStatus('status.anchorUpdated');
 	}
 
 	function moveCurveControlHandle(
@@ -1716,19 +1753,19 @@
 			};
 			return { ...curve, segments };
 		});
-		status = kind === 'control1' ? '已更新出控制柄' : '已更新入控制柄';
+		setStatus(kind === 'control1' ? 'status.controlOutUpdated' : 'status.controlInUpdated');
 	}
 
 	function updateSelectedCurveStyle(
 		changes: Partial<Pick<CurvePath, 'stroke' | 'strokeWidth'>>,
-		statusMessage: string
+		nextStatus: StatusDescriptor
 	) {
 		if (!selectedCurveIds.length) return;
 		commitEditorMutation(() => {
 			curves = curves.map((curve) =>
 				selectedCurveIdSet.has(curve.id) ? { ...curve, ...changes } : curve
 			);
-		}, statusMessage);
+		}, nextStatus);
 	}
 
 	function renameSelectedCurve(name: string) {
@@ -1739,7 +1776,7 @@
 			curves = curves.map((curve) =>
 				curve.id === selectedCurveObject.id ? { ...curve, name: nextName } : curve
 			);
-		}, '已更新路径名称');
+		}, { key: 'status.pathNameUpdated' });
 	}
 
 	function removeSelectedCurve() {
@@ -1752,7 +1789,7 @@
 			selectedObject = nextSelectedCurveIds[0]
 				? { type: 'curve', id: nextSelectedCurveIds[0] }
 				: null;
-		}, `已删除 ${idsToRemove.size} 条曲线`);
+		}, { key: 'status.curvesDeleted', values: { count: idsToRemove.size } });
 	}
 
 	function removeSelectedImage() {
@@ -1761,7 +1798,7 @@
 			image = null;
 			selectedObject = null;
 			selectedCurveIds = [];
-		}, '已删除参考图');
+		}, { key: 'status.imageDeleted' });
 	}
 
 	function clearCurves() {
@@ -1771,7 +1808,7 @@
 			if (selectedObject?.type === 'curve') {
 				selectedObject = null;
 			}
-		}, '已清空曲线');
+		}, { key: 'status.curvesCleared' });
 	}
 
 	function undoLastCurve() {
@@ -1780,7 +1817,7 @@
 		undoHistory = undoHistory.slice(0, -1);
 		redoHistory = [...redoHistory, createEditorSnapshot()];
 		applyEditorSnapshot(previous);
-		status = '已撤销上一步操作';
+		setStatus('status.undo');
 	}
 
 	function redoLastCurve() {
@@ -1789,7 +1826,7 @@
 		redoHistory = redoHistory.slice(0, -1);
 		undoHistory = [...undoHistory, createEditorSnapshot()];
 		applyEditorSnapshot(next);
-		status = '已恢复上一步操作';
+		setStatus('status.redo');
 	}
 
 	function handleShortcutKeydown(event: KeyboardEvent) {
@@ -1808,13 +1845,13 @@
 			if (activeTool === 'point' && pointModeAnchors.length) {
 				event.preventDefault();
 				cancelPointModeDraft();
-				status = '已取消描点';
+				setStatus('status.pointDraftCanceled');
 				return;
 			}
 			if (selectedObject || selectedCurveIds.length) {
 				event.preventDefault();
 				clearObjectSelection();
-				status = '已取消对象选择';
+				setStatus('status.objectSelectionCleared');
 			}
 			return;
 		}
@@ -2041,7 +2078,7 @@
 			fitImageToCanvas();
 			syncLayerOrder();
 			redrawCurves();
-			status = `已载入参考图：${file.name}`;
+			setStatus('status.imageLoaded', { name: file.name });
 		};
 	}
 
@@ -2064,7 +2101,7 @@
 	}
 
 	function commitSelectedImageOpacityEdit() {
-		finalizePendingEditHistory('已更新参考图透明度');
+		finalizePendingEditHistory({ key: 'status.imageOpacityUpdated' });
 	}
 
 	function toggleSelectedImageLock() {
@@ -2075,7 +2112,7 @@
 				...selectedImage,
 				locked: nextLocked
 			};
-		}, nextLocked ? '已锁定参考图' : '已解锁参考图');
+		}, { key: nextLocked ? 'status.imageLocked' : 'status.imageUnlocked' });
 	}
 
 	function applyImageBounds(bounds: { x: number; y: number; width: number; height: number }) {
@@ -2343,14 +2380,14 @@
 		if (!selectedImage) return;
 		commitEditorMutation(() => {
 			fitImageToCanvas();
-		}, '已适配参考图到画布', { suppressRender: true });
+		}, { key: 'status.imageFitToCanvas' }, { suppressRender: true });
 	}
 
 	function resetSelectedImageTransform() {
 		if (!selectedImage) return;
 		commitEditorMutation(() => {
 			resetImageTransform();
-		}, '已重置参考图变换', { suppressRender: true });
+		}, { key: 'status.imageTransformReset' }, { suppressRender: true });
 	}
 
 	function resetView() {
@@ -2418,7 +2455,9 @@
 	async function copyExport() {
 		if (!browser || !exportCode) return;
 		await navigator.clipboard.writeText(exportCode);
-		status = `${exportFormat === 'luadraw' ? 'LuaDraw 输出' : exportFormat === 'cetz' ? 'CeTZ 输出' : 'TikZ 输出'}代码已复制`;
+		setStatus('status.exportCopied', {
+			format: exportFormat === 'luadraw' ? 'LuaDraw' : exportFormat === 'cetz' ? 'CeTZ' : 'TikZ'
+		});
 	}
 
 	function downloadExport() {
@@ -2453,7 +2492,7 @@
 				const closedSnap = getPointModeClosedSnapState(point);
 				if (closedSnap.eligible && closedSnap.withinSnapRange && closedSnap.targetPoint) {
 					updateSnapPreviewCircle(closedSnap.targetPoint, closedSnap.snapRadius);
-					snapPreviewStatus = '吸附到起点，点击闭合路径';
+					setSnapPreviewStatus('status.closeSnapPreview');
 					commitPointModeCurve({ closed: true, finalPoint: closedSnap.targetPoint });
 					return;
 				}
@@ -2470,7 +2509,10 @@
 					gridSnap.gridCoordinate
 				) {
 					updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
-					snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+					setSnapPreviewStatus('status.gridSnap', {
+						x: gridSnap.gridCoordinate.x,
+						y: gridSnap.gridCoordinate.y
+					});
 				} else {
 					clearClosedPathSnapPreview();
 				}
@@ -2523,7 +2565,7 @@
 
 				if (target?.kind === 'image-body') {
 					setSelectedImage();
-					status = '已选中参考图';
+					setStatus('status.imageSelected');
 					if (!image?.locked) {
 						beginPendingEditHistory();
 						activeImageHandle = 'move';
@@ -2594,7 +2636,7 @@
 					if (targetPoint) {
 						snappedPoint = targetPoint;
 						updateSnapPreviewCircle(targetPoint, snapRadius);
-						snapPreviewStatus = '';
+						clearSnapPreviewStatus();
 					}
 				}
 				if (
@@ -2617,10 +2659,11 @@
 							);
 							snapPreviewCircle?.remove();
 							snapPreviewCircle = null;
-							snapPreviewStatus =
+							setSnapPreviewStatus(
 								orthogonalSnapState.orientation === 'horizontal'
-									? '控制点水平吸附'
-									: '控制点垂直吸附';
+									? 'status.controlHorizontalSnap'
+									: 'status.controlVerticalSnap'
+							);
 						}
 					}
 				}
@@ -2641,7 +2684,7 @@
 						);
 						snapPreviewCircle?.remove();
 						snapPreviewCircle = null;
-						snapPreviewStatus = '相邻控制点共线吸附';
+						setSnapPreviewStatus('status.controlCollinearSnap');
 					}
 				}
 				if (!controlGuideActive) {
@@ -2668,7 +2711,10 @@
 					gridSnap.gridCoordinate
 				) {
 					updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
-					snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+					setSnapPreviewStatus('status.gridSnap', {
+						x: gridSnap.gridCoordinate.x,
+						y: gridSnap.gridCoordinate.y
+					});
 				} else if (!(snapClosedPaths && curve && !curve.closed && handle.kind === 'anchor')) {
 					clearClosedPathSnapPreview();
 				}
@@ -2709,7 +2755,7 @@
 				activePath = null;
 			}
 			if (activeHandle) {
-				finalizePendingEditHistory('已更新坐标校准');
+				finalizePendingEditHistory({ key: 'status.calibrationUpdated' });
 			}
 			if (activeCurveHandle) {
 				clearCollinearControlSnapPreview();
@@ -2738,11 +2784,11 @@
 						redrawCurves();
 					}
 				}
-				finalizePendingEditHistory('已更新路径');
+				finalizePendingEditHistory({ key: 'status.pathUpdated' });
 				clearClosedPathSnapPreview();
 			}
 			if (activeImageHandle) {
-				finalizePendingEditHistory('已更新参考图');
+				finalizePendingEditHistory({ key: 'status.imageUpdated' });
 			}
 			activeCurveHandle = null;
 			activeImageHandle = null;
@@ -2764,7 +2810,7 @@
 				if (closedSnap.eligible && closedSnap.withinSnapRange && closedSnap.targetPoint) {
 					snappedPoint = closedSnap.targetPoint;
 					updateSnapPreviewCircle(closedSnap.targetPoint, closedSnap.snapRadius);
-					snapPreviewStatus = '吸附到起点，点击闭合路径';
+					setSnapPreviewStatus('status.closeSnapPreview');
 				} else {
 					snappedPoint = getSnappedBrushPoint(rawPoint);
 					const gridSnap = getGridPointSnapState(rawPoint);
@@ -2775,7 +2821,10 @@
 						gridSnap.gridCoordinate
 					) {
 						updateSnapPreviewCircle(gridSnap.targetPoint, gridSnap.snapRadius);
-						snapPreviewStatus = `格点吸附 (${gridSnap.gridCoordinate.x}, ${gridSnap.gridCoordinate.y})`;
+						setSnapPreviewStatus('status.gridSnap', {
+							x: gridSnap.gridCoordinate.x,
+							y: gridSnap.gridCoordinate.y
+						});
 					} else {
 						clearClosedPathSnapPreview();
 					}
@@ -2815,7 +2864,7 @@
 </script>
 
 <svelte:head>
-	<title>Bezier Curve Digitizer</title>
+	<title>{$_('app.title')}</title>
 </svelte:head>
 
 <main class="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-950">
@@ -2871,8 +2920,8 @@
 		<div class="grid place-items-center border-r border-zinc-300 bg-zinc-100">
 			<button
 				class="grid h-7 w-7 place-items-center rounded border border-zinc-300 bg-white shadow-sm hover:bg-zinc-50"
-				aria-label={leftPanelCollapsed ? '显示左侧面板' : '隐藏左侧面板'}
-				title={leftPanelCollapsed ? '显示左侧面板' : '隐藏左侧面板'}
+				aria-label={leftPanelCollapsed ? $_('layout.showLeftPanel') : $_('layout.hideLeftPanel')}
+				title={leftPanelCollapsed ? $_('layout.showLeftPanel') : $_('layout.hideLeftPanel')}
 				onclick={(event) => togglePanel('left', event)}
 				type="button"
 			>
@@ -2887,7 +2936,7 @@
 		<div
 			role="separator"
 			aria-orientation="vertical"
-			aria-label="调整左侧面板宽度"
+			aria-label={$_('layout.resizeLeftPanel')}
 			class={`border-r border-zinc-300 bg-zinc-100 transition-colors ${
 				leftPanelCollapsed ? 'cursor-default opacity-60' : 'cursor-col-resize hover:bg-blue-200'
 			} ${resizingPanel === 'left' ? 'bg-blue-300' : ''}`}
@@ -2907,7 +2956,7 @@
 		<div
 			role="separator"
 			aria-orientation="vertical"
-			aria-label="调整右侧面板宽度"
+			aria-label={$_('layout.resizeRightPanel')}
 			class={`border-l border-zinc-300 bg-zinc-100 transition-colors ${
 				rightPanelCollapsed ? 'cursor-default opacity-60' : 'cursor-col-resize hover:bg-blue-200'
 			} ${resizingPanel === 'right' ? 'bg-blue-300' : ''}`}
@@ -2917,8 +2966,8 @@
 		<div class="grid place-items-center border-l border-zinc-300 bg-zinc-100">
 			<button
 				class="grid h-7 w-7 place-items-center rounded border border-zinc-300 bg-white shadow-sm hover:bg-zinc-50"
-				aria-label={rightPanelCollapsed ? '显示右侧面板' : '隐藏右侧面板'}
-				title={rightPanelCollapsed ? '显示右侧面板' : '隐藏右侧面板'}
+				aria-label={rightPanelCollapsed ? $_('layout.showRightPanel') : $_('layout.hideRightPanel')}
+				title={rightPanelCollapsed ? $_('layout.showRightPanel') : $_('layout.hideRightPanel')}
 				onclick={(event) => togglePanel('right', event)}
 				type="button"
 			>

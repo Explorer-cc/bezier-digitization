@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ToolMode } from '$lib/core/types';
 	import { Hand, Pencil, Redo2, Undo2 } from '@lucide/svelte';
+	import { _ } from 'svelte-i18n';
 
 	let {
 		activeTool,
@@ -18,15 +19,15 @@
 		onRedo: () => void;
 	} = $props();
 
-	const tools: Array<{ id: ToolMode; label: string; icon: typeof Pencil }> = [
-		{ id: 'pan', label: '移动', icon: Hand },
-		{ id: 'brush', label: '画笔', icon: Pencil },
-		{ id: 'point', label: '描点', icon: Pencil }
+	const tools: Array<{ id: ToolMode; labelKey: string; icon: typeof Pencil }> = [
+		{ id: 'pan', labelKey: 'toolbar.pan', icon: Hand },
+		{ id: 'brush', labelKey: 'toolbar.brush', icon: Pencil },
+		{ id: 'point', labelKey: 'toolbar.point', icon: Pencil }
 	];
 </script>
 
 <section>
-	<h2 class="text-sm font-semibold">工具</h2>
+	<h2 class="text-sm font-semibold">{$_('toolbar.title')}</h2>
 	<div class="mt-3 grid grid-cols-3 gap-2">
 		{#each tools as item (item.id)}
 			{@const Icon = item.icon}
@@ -40,7 +41,7 @@
 				type="button"
 			>
 				<Icon size={16} />
-				{item.label}
+				{$_(item.labelKey)}
 			</button>
 		{/each}
 	</div>
@@ -53,7 +54,7 @@
 			title="Ctrl+Z"
 		>
 			<Undo2 size={16} />
-			撤销
+			{$_('toolbar.undo')}
 		</button>
 		<button
 			class="inline-flex h-10 w-full items-center justify-center gap-2 rounded border border-zinc-300 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
@@ -63,7 +64,7 @@
 			title="Ctrl+Y"
 		>
 			<Redo2 size={16} />
-			恢复
+			{$_('toolbar.redo')}
 		</button>
 	</div>
 </section>

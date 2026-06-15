@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { _ } from 'svelte-i18n';
+
 	let {
 		stroke = $bindable(),
 		strokeWidth = $bindable(),
@@ -25,13 +27,13 @@
 </script>
 
 <section class="mt-6 space-y-3">
-	<h2 class="text-sm font-semibold">画笔</h2>
+	<h2 class="text-sm font-semibold">{$_('brush.title')}</h2>
 	<label class="block text-xs text-zinc-600">
-		颜色
+		{$_('brush.color')}
 		<input bind:value={stroke} class="mt-1 h-9 w-full" type="color" />
 	</label>
 	<label class="block text-xs text-zinc-600">
-		线宽 {strokeWidth}pt
+		{$_('brush.strokeWidth', { values: { value: strokeWidth } })}
 		<input
 			bind:value={strokeWidth}
 			class="mt-1 w-full"
@@ -42,7 +44,7 @@
 		/>
 	</label>
 	<label class="block text-xs text-zinc-600">
-		简化容差 {simplifyTolerance}
+		{$_('brush.simplifyTolerance', { values: { value: simplifyTolerance } })}
 		<input
 			bind:value={simplifyTolerance}
 			class="mt-1 w-full"
@@ -54,26 +56,26 @@
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={smoothDrawnPath} type="checkbox" />
-		自动平滑路径
+		{$_('brush.smoothDrawnPath')}
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapToGridPoints} type="checkbox" />
-		格点吸附
+		{$_('brush.snapToGridPoints')}
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapClosedPaths} type="checkbox" />
-		闭合路径吸附
+		{$_('brush.snapClosedPaths')}
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapOrthogonalControlPoints} type="checkbox" />
-		垂直/水平控制点吸附
+		{$_('brush.snapOrthogonalControlPoints')}
 	</label>
 	<label class="flex items-center gap-2 text-sm">
 		<input bind:checked={snapCollinearControlPoints} type="checkbox" />
-		相邻控制点共线吸附
+		{$_('brush.snapCollinearControlPoints')}
 	</label>
 	<label class="block text-xs text-zinc-600">
-		自动吸附阈值 {closedPathSnapDistance}pt
+		{$_('brush.closedPathSnapDistance', { values: { value: closedPathSnapDistance } })}
 		<input
 			bind:value={closedPathSnapDistance}
 			class="mt-1 w-full"
@@ -85,7 +87,7 @@
 		/>
 	</label>
 	<label class="block text-xs text-zinc-600">
-		自动吸附角度 {snapAngleTolerance}°
+		{$_('brush.snapAngleTolerance', { values: { value: snapAngleTolerance } })}
 		<input
 			bind:value={snapAngleTolerance}
 			class="mt-1 w-full"

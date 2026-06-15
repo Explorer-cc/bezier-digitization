@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { CurvePath } from '$lib/core/types';
 	import { Trash2 } from '@lucide/svelte';
+	import { _ } from 'svelte-i18n';
 
 	let {
 		curves,
@@ -26,7 +27,7 @@
 <section class="h-full min-h-0 overflow-hidden border-b border-zinc-200">
 	<div class="flex h-full min-h-0 flex-col p-4">
 		<div class="flex items-center justify-between gap-3">
-			<h2 class="text-sm font-semibold">曲线</h2>
+			<h2 class="text-sm font-semibold">{$_('curves.title')}</h2>
 			<div class="flex shrink-0 gap-2">
 				<button
 					class="rounded border border-zinc-300 px-2 text-xs disabled:cursor-not-allowed disabled:opacity-45"
@@ -34,7 +35,7 @@
 					onclick={onSelectAllCurves}
 					type="button"
 				>
-					全选
+					{$_('curves.selectAll')}
 				</button>
 				<button
 					class="rounded border border-zinc-300 px-2 text-xs disabled:cursor-not-allowed disabled:opacity-45"
@@ -42,13 +43,13 @@
 					onclick={onClearCurveSelection}
 					type="button"
 				>
-					全不选
+					{$_('curves.selectNone')}
 				</button>
 				<button
 					class="rounded border border-zinc-300 p-2 disabled:cursor-not-allowed disabled:opacity-45"
 					disabled={!selectedCurveIds.length}
 					onclick={onRemoveSelectedCurve}
-					title="删除已选曲线"
+					title={$_('curves.deleteSelected')}
 					type="button"
 				>
 					<Trash2 size={15} />
@@ -58,12 +59,14 @@
 					onclick={onClearCurves}
 					type="button"
 				>
-					清空
+					{$_('curves.clear')}
 				</button>
 			</div>
 		</div>
 		<p class="mt-2 text-xs text-zinc-500">
-			{selectedCurveIds.length ? `已选择 ${selectedCurveIds.length} 条曲线` : '未选择曲线'}
+			{selectedCurveIds.length
+				? $_('curves.selectedCount', { values: { count: selectedCurveIds.length } })
+				: $_('curves.noneSelected')}
 		</p>
 		<div class="mt-3 min-h-0 flex-1 overflow-y-auto">
 			{#if curves.length}
@@ -88,11 +91,13 @@
 							</span>
 							<span class="truncate">{curve.name}</span>
 						</span>
-						<span class="shrink-0 text-xs text-zinc-500">{curve.segments.length} 段</span>
+						<span class="shrink-0 text-xs text-zinc-500">
+							{$_('curves.segmentCount', { values: { count: curve.segments.length } })}
+						</span>
 					</button>
 				{/each}
 			{:else}
-				<p class="text-sm text-zinc-500">暂无曲线</p>
+				<p class="text-sm text-zinc-500">{$_('curves.empty')}</p>
 			{/if}
 		</div>
 	</div>

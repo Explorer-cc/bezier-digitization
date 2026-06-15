@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { CanvasImage, CurvePath } from '$lib/core/types';
 	import { Lock, Unlock } from '@lucide/svelte';
+	import { _ } from 'svelte-i18n';
 	let imageActionRow = $state<HTMLDivElement | null>(null);
 
 	let {
@@ -25,11 +26,11 @@
 		onToggleImageLock: () => void;
 		onFitImageToCanvas: () => void;
 		onResetImageTransform: () => void;
-		onRenameSelectedCurve: (name: string) => void;
-		onUpdateSelectedCurveStyle: (
-			changes: Partial<Pick<CurvePath, 'stroke' | 'strokeWidth'>>,
-			statusMessage: string
-		) => void;
+	onRenameSelectedCurve: (name: string) => void;
+	onUpdateSelectedCurveStyle: (
+		changes: Partial<Pick<CurvePath, 'stroke' | 'strokeWidth'>>,
+		nextStatus: { key: string }
+	) => void;
 	} = $props();
 
 	let selectedCurveCount = $derived(selectedCurves.length);
@@ -47,17 +48,16 @@
 			? firstWidth
 			: selectedCurves[0].strokeWidth;
 	});
-
 </script>
 
 <section class="mt-6 space-y-3">
-	<h2 class="text-sm font-semibold">对象属性</h2>
+	<h2 class="text-sm font-semibold">{$_('objects.title')}</h2>
 	{#if selectedImage}
 		<div class="rounded border border-zinc-200 p-3 text-sm">
 			<div class="truncate font-medium">{selectedImage.name}</div>
-			<div class="mt-1 text-xs text-zinc-500">参考图对象</div>
+			<div class="mt-1 text-xs text-zinc-500">{$_('objects.referenceImage')}</div>
 			<label class="mt-3 block text-xs text-zinc-600">
-				透明度 {Math.round(selectedImage.opacity * 100)}%
+				{$_('objects.opacity', { values: { value: Math.round(selectedImage.opacity * 100) } })}
 				<input
 					class="mt-1 w-full"
 					max="1"
@@ -78,41 +78,49 @@
 					type="button"
 				>
 					{#if selectedImage.locked}<Lock size={14} />{:else}<Unlock size={14} />{/if}
-					{selectedImage.locked ? '已锁定' : '未锁定'}
+					{selectedImage.locked ? $_('objects.locked') : $_('objects.unlocked')}
 				</button>
 				<button
 					class="inline-flex h-8 shrink-0 items-center rounded border border-zinc-300 px-2 text-xs"
 					onclick={onFitImageToCanvas}
 					type="button"
 				>
-					适配画布
+					{$_('objects.fitToCanvas')}
 				</button>
 				<button
 					class="inline-flex h-8 shrink-0 items-center rounded border border-zinc-300 px-2 text-xs"
 					onclick={onResetImageTransform}
 					type="button"
 				>
-					重置变换
+					{$_('objects.resetTransform')}
 				</button>
 			</div>
 		</div>
 	{:else if selectedCurves.length}
 		<div class="rounded border border-zinc-200 p-3 text-sm">
 			<div class="truncate font-medium">
-				{selectedCurveCount === 1 ? selectedCurveObject?.name : `已选择 ${selectedCurveCount} 条路径`}
+				{selectedCurveCount === 1
+					? selectedCurveObject?.name
+					: $_('objects.selectedPaths', { values: { count: selectedCurveCount } })}
 			</div>
-			<div class="mt-1 text-xs text-zinc-500">路径对象</div>
+			<div class="mt-1 text-xs text-zinc-500">{$_('objects.pathObject')}</div>
 			<div class="mt-3 text-xs leading-5 text-zinc-600">
-				<div>Bezier 段数 {selectedCurves.reduce((total, curve) => total + curve.segments.length, 0)}</div>
+				<div>
+					{$_('objects.bezierSegmentCount', {
+						values: {
+							count: selectedCurves.reduce((total, curve) => total + curve.segments.length, 0)
+						}
+					})}
+				</div>
 				{#if selectedCurveCount === 1 && selectedCurveObject}
-					<div>{selectedCurveObject.closed ? '闭合路径' : '开放路径'}</div>
+					<div>{selectedCurveObject.closed ? $_('objects.closedPath') : $_('objects.openPath')}</div>
 				{:else}
-					<div>批量编辑已选路径样式</div>
+					<div>{$_('objects.batchEditPathStyle')}</div>
 				{/if}
 			</div>
 			{#if selectedCurveCount === 1 && selectedCurveObject}
 				<label class="mt-3 block text-xs text-zinc-600">
-					名称
+					{$_('objects.name')}
 					<input
 						class="mt-1 h-9 w-full rounded border border-zinc-300 px-2 text-sm"
 						type="text"
@@ -123,7 +131,7 @@
 				</label>
 			{/if}
 			<label class="mt-3 block text-xs text-zinc-600">
-				颜色{selectedCurveCount > 1 ? '（批量）' : ''}
+				{selectedCurveCount > 1 ? $_('objects.colorBatch') : $_('objects.color')}
 				<input
 					class="mt-1 h-9 w-full"
 					type="color"
@@ -131,12 +139,16 @@
 					onchange={(event) =>
 						onUpdateSelectedCurveStyle(
 							{ stroke: (event.currentTarget as HTMLInputElement).value },
-							selectedCurveCount > 1 ? '已批量更新路径颜色' : '已更新路径颜色'
+							selectedCurveCount > 1
+								? { key: 'status.pathColorBatchUpdated' }
+								: { key: 'status.pathColorUpdated' }
 						)}
 				/>
 			</label>
 			<label class="mt-3 block text-xs text-zinc-600">
-				线宽 {selectedCurveCommonStrokeWidth}pt{selectedCurveCount > 1 ? '（批量）' : ''}
+				{selectedCurveCount > 1
+					? $_('objects.strokeWidthBatch', { values: { value: selectedCurveCommonStrokeWidth } })
+					: $_('objects.strokeWidth', { values: { value: selectedCurveCommonStrokeWidth } })}
 				<input
 					class="mt-1 w-full"
 					max="3"
@@ -147,12 +159,14 @@
 					onchange={(event) =>
 						onUpdateSelectedCurveStyle(
 							{ strokeWidth: Number((event.currentTarget as HTMLInputElement).value) },
-							selectedCurveCount > 1 ? '已批量更新路径线宽' : '已更新路径线宽'
+							selectedCurveCount > 1
+								? { key: 'status.pathStrokeWidthBatchUpdated' }
+								: { key: 'status.pathStrokeWidthUpdated' }
 						)}
 				/>
 			</label>
 		</div>
 	{:else}
-		<p class="text-sm text-zinc-500">未选中对象</p>
+		<p class="text-sm text-zinc-500">{$_('objects.noneSelected')}</p>
 	{/if}
 </section>
