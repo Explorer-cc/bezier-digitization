@@ -138,6 +138,7 @@
 		"calibrationUpdated": "Coordinate calibration updated",
 		"pathUpdated": "Path updated",
 		"imageUpdated": "Reference image updated",
+		"imageNudged": "Reference image position nudged",
 		"pathColorUpdated": "Path color updated",
 		"pathColorBatchUpdated": "Selected path colors updated",
 		"pathStrokeWidthUpdated": "Path stroke width updated",

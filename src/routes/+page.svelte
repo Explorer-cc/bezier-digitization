@@ -7,6 +7,7 @@
 		getBasis
 	} from '$lib/core/coordinate';
 	import { exportCurves } from '$lib/core/exporter';
+	import { getImageNudgeDelta } from '$lib/core/image';
 	import type {
 		CanvasObjectType,
 		CanvasImage,
@@ -96,6 +97,8 @@
 	};
 
 	let pendingEditSnapshot: EditorSnapshot | null = null;
+	let imageNudgeSnapshot: EditorSnapshot | null = null;
+	const pressedImageNudgeKeys = new Set<string>();
 
 	let activeTool = $state<ToolMode>('pan');
 	let image = $state<CanvasImage | null>(null);
@@ -1829,6 +1832,29 @@
 		setStatus('status.redo');
 	}
 
+	function finalizeImageNudgeHistory() {
+		pressedImageNudgeKeys.clear();
+		if (!imageNudgeSnapshot) return false;
+		const before = imageNudgeSnapshot;
+		imageNudgeSnapshot = null;
+		const after = createEditorSnapshot();
+		if (snapshotsEqual(before, after)) return false;
+		undoHistory = [...undoHistory, before];
+		redoHistory = [];
+		setStatus('status.imageNudged');
+		return true;
+	}
+
+	function handleImageNudgeKeyup(event: KeyboardEvent) {
+		const key = event.key.toLowerCase();
+		if (!pressedImageNudgeKeys.delete(key)) return;
+		if (!pressedImageNudgeKeys.size) finalizeImageNudgeHistory();
+	}
+
+	function handleWindowBlur() {
+		finalizeImageNudgeHistory();
+	}
+
 	function handleShortcutKeydown(event: KeyboardEvent) {
 		const target = event.target;
 		if (
@@ -1841,6 +1867,30 @@
 		}
 
 		const key = event.key.toLowerCase();
+		const imageNudgeDelta = paper
+			? getImageNudgeDelta(key, paper.view.zoom, event.shiftKey)
+			: null;
+		if (
+			imageNudgeDelta &&
+			selectedImage &&
+			!selectedImage.locked &&
+			!event.ctrlKey &&
+			!event.metaKey &&
+			!event.altKey
+		) {
+			event.preventDefault();
+			imageNudgeSnapshot ??= createEditorSnapshot();
+			pressedImageNudgeKeys.add(key);
+			moveImageBy(imageNudgeDelta);
+			return;
+		}
+		if (
+			imageNudgeSnapshot &&
+			(key === 'escape' || key === 'delete' || key === 'backspace' || event.ctrlKey || event.metaKey)
+		) {
+			finalizeImageNudgeHistory();
+		}
+
 		if (key === 'escape') {
 			if (activeTool === 'point' && pointModeAnchors.length) {
 				event.preventDefault();
@@ -2474,6 +2524,8 @@
 	onMount(async () => {
 		loadBrushSettings();
 		window.addEventListener('keydown', handleShortcutKeydown);
+		window.addEventListener('keyup', handleImageNudgeKeyup);
+		window.addEventListener('blur', handleWindowBlur);
 		const paperModule = (await import('paper')).default;
 		paper = paperModule;
 		paperModule.setup(canvas!);
@@ -2851,7 +2903,11 @@
 			window.removeEventListener('pointerup', stopRightSectionResize);
 			window.removeEventListener('pointercancel', stopRightSectionResize);
 			window.removeEventListener('keydown', handleShortcutKeydown);
+			window.removeEventListener('keyup', handleImageNudgeKeyup);
+			window.removeEventListener('blur', handleWindowBlur);
 		}
+		pressedImageNudgeKeys.clear();
+		imageNudgeSnapshot = null;
 		if (image?.src) {
 			URL.revokeObjectURL(image.src);
 		}

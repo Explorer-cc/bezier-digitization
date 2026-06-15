@@ -138,6 +138,7 @@
 		"calibrationUpdated": "已更新坐标校准",
 		"pathUpdated": "已更新路径",
 		"imageUpdated": "已更新参考图",
+		"imageNudged": "已微调参考图位置",
 		"pathColorUpdated": "已更新路径颜色",
 		"pathColorBatchUpdated": "已批量更新路径颜色",
 		"pathStrokeWidthUpdated": "已更新路径线宽",
