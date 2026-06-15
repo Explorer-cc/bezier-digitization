@@ -1298,6 +1298,10 @@
 			return { kind: 'image-body' as const };
 		}
 
+		if (imageBodyHit && image?.locked) {
+			return { kind: 'image-body' as const };
+		}
+
 		if (curveId) {
 			return { kind: 'curve' as const, curveId };
 		}
@@ -2616,7 +2620,10 @@
 				if (target?.kind === 'image-body') {
 					setSelectedImage();
 					setStatus('status.imageSelected');
-					if (!image?.locked) {
+					if (image?.locked) {
+						pointerStart = point;
+						document.body.classList.add('cursor-pan-tool');
+					} else {
 						beginPendingEditHistory();
 						activeImageHandle = 'move';
 					}
