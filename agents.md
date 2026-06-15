@@ -8,7 +8,7 @@
 - **Language**: TypeScript.
 - **Package manager**: pnpm.
 - **Styling**: Tailwind CSS through `@tailwindcss/vite`.
-- **Deployment adapter**: `@sveltejs/adapter-vercel`.
+- **Deployment adapter**: Currently `@sveltejs/adapter-vercel`; planned migration to `@sveltejs/adapter-static` for GitHub Pages.
 - **Runtime dependencies**: `paper`, `@lucide/svelte`, `svelte-i18n`.
 - **Test runner**: Vitest.
 
@@ -248,6 +248,109 @@ type CoordinateSystem = {
 ```
 
 `CanvasImage` currently has: `id, name, src, x, y, width, height, rotation, opacity, locked`.
+
+## GitHub Pages Deployment Plan
+
+The deployed product should remain a fully browser-side static application. The current feature set does not require SvelteKit API routes, server-side LLM calls, secret API keys, a database, or server-side user storage. Do not introduce a backend solely for deployment.
+
+Target repository and site:
+
+- GitHub repository: `Explorer-cc/bezier-digitization`.
+- Deployment branch: `main`.
+- Expected project-site URL: `https://explorer-cc.github.io/bezier-digitization/`.
+- Build artifact directory: `build/`.
+- GitHub Pages publishing source: GitHub Actions.
+
+The following work is still required before the first deployment:
+
+1. Replace the Vercel adapter with the static adapter:
+
+   ```powershell
+   pnpm remove @sveltejs/adapter-vercel --store-dir .pnpm-store
+   pnpm add -D @sveltejs/adapter-static --store-dir .pnpm-store
+   ```
+
+2. Update `svelte.config.js`:
+
+   - Import `@sveltejs/adapter-static` instead of `@sveltejs/adapter-vercel`.
+   - Configure `pages: 'build'` and `assets: 'build'`.
+   - Generate `404.html` as the fallback so future client-side routes can still load through GitHub Pages.
+   - Configure `kit.paths.base` from `process.env.BASE_PATH`, defaulting to an empty string for local development.
+   - Keep the existing project-wide Svelte 5 runes configuration.
+
+   Intended configuration shape:
+
+   ```js
+   import adapter from '@sveltejs/adapter-static';
+
+   /** @type {import('@sveltejs/kit').Config} */
+   const config = {
+     compilerOptions: {
+       runes: ({ filename }) =>
+         filename.split(/[/\\]/).includes('node_modules') ? undefined : true
+     },
+     kit: {
+       adapter: adapter({
+         pages: 'build',
+         assets: 'build',
+         fallback: '404.html'
+       }),
+       paths: {
+         base: process.env.BASE_PATH ?? ''
+       }
+     }
+   };
+
+   export default config;
+   ```
+
+3. Add a `packageManager` field to `package.json` so CI uses the same pnpm major version as local development, currently `pnpm@11.4.0`.
+
+4. Add `.github/workflows/deploy.yml` with these jobs and gates:
+
+   - Trigger on pushes to `main` and manual `workflow_dispatch` runs.
+   - Grant `contents: read`, `pages: write`, and `id-token: write` permissions.
+   - Check out the repository.
+   - Install pnpm and Node.js 22 with pnpm dependency caching.
+   - Run `pnpm install --frozen-lockfile`.
+   - Run `pnpm check` and `pnpm test` before deployment.
+   - Build with `BASE_PATH=/${{ github.event.repository.name }}`.
+   - Upload `build/` using `actions/upload-pages-artifact`.
+   - Deploy the uploaded artifact using `actions/deploy-pages` in a separate `deploy` job.
+   - Use a Pages concurrency group so a newer deployment supersedes an older in-progress deployment.
+
+5. In the GitHub repository settings, open `Settings > Pages` and set the publishing source to `GitHub Actions`.
+
+6. Replace the generated starter `README.md` with project-specific documentation before or alongside the first public deployment. Include the live Pages URL, local development commands, supported import methods, and export formats.
+
+Local deployment verification must be completed before pushing the workflow:
+
+```powershell
+$env:BASE_PATH='/bezier-digitization'
+pnpm check
+pnpm test
+pnpm build
+pnpm preview
+```
+
+Verify all of the following:
+
+- `build/index.html` exists.
+- `build/404.html` exists.
+- The application loads under `/bezier-digitization/`, not only at `/`.
+- JavaScript, CSS, favicon, and other generated assets do not return 404 responses.
+- Image file selection, drag-and-drop, and clipboard paste still work over HTTPS.
+- Paper.js editing, localStorage settings, copy, and download behavior still work.
+- A refresh at the deployed project URL loads the application successfully.
+- No API route, server secret, database, or runtime server process is required.
+
+After the workflow succeeds, the expected site URL is:
+
+```text
+https://explorer-cc.github.io/bezier-digitization/
+```
+
+GitHub Pages is a deliberate deployment constraint for the current product. If a future feature requires protected server execution or persistent cloud data, deploy that backend separately rather than embedding secrets or server assumptions into the static Pages build.
 
 ## Dependency Policy
 
