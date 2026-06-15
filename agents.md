@@ -24,7 +24,9 @@ src/
     CanvasWorkspace.svelte      # Canvas element with status overlay and reset-view button.
     CurveListPanel.svelte       # Curve list with multi-selection, delete, and clear actions.
     ExportPanel.svelte          # Export format selector, precision, code output, and download.
-    Header.svelte               # App title and image upload button.
+    Header.svelte               # App title, language switcher, and image-upload dialog trigger.
+    ImageUploadDialog.svelte    # Image selection, drag-and-drop, and clipboard-paste dialog.
+    LanguageSwitcher.svelte     # Chinese/English locale switcher.
     ObjectPropertiesPanel.svelte # Shared object-properties UI for image and curve objects.
     Toolbar.svelte              # Move, brush, point, undo, and redo controls.
   routes/
@@ -39,6 +41,16 @@ src/
       coordinate.test.ts # Vitest coverage for coordinate conversion.
       exporter.ts        # TikZ formatting and export logic.
       exporter.test.ts   # Vitest coverage for cubic Bezier TikZ export.
+      image.ts           # Zoom-aware reference-image keyboard nudge calculations.
+      image.test.ts      # Vitest coverage for image keyboard nudge deltas.
+      image-import.ts    # Image-file validation and clipboard-file creation helpers.
+      image-import.test.ts # Vitest coverage for image import helpers.
+    i18n/
+      locales/
+        en.json          # English UI and status translations.
+        zh.json          # Chinese UI and status translations.
+    i18n.ts              # svelte-i18n initialization, persistence, and locale helpers.
+    i18n.test.ts         # Locale normalization and translation-key consistency tests.
     assets/
       favicon.svg
 
@@ -50,9 +62,11 @@ Generated or environment-specific folders such as `.svelte-kit`, `.vercel`, `.pn
 
 ## Current Implementation Notes
 
-The main screen is orchestrated by `src/routes/+page.svelte`, which owns the Paper.js canvas lifecycle and all application state. The UI has been extracted into eight Svelte components under `src/components/`:
+The main screen is orchestrated by `src/routes/+page.svelte`, which owns the Paper.js canvas lifecycle and all application state. The UI has been extracted into ten Svelte components under `src/components/`:
 
-- `Header.svelte` — app title bar and image upload button.
+- `Header.svelte` — app title bar, language switcher, and image-upload dialog trigger.
+- `ImageUploadDialog.svelte` — modal image import through file selection, drag-and-drop, or clipboard paste.
+- `LanguageSwitcher.svelte` — Chinese/English locale switching with persisted user selection.
 - `Toolbar.svelte` — move/brush/point tool switching and undo/redo buttons (pan label: "移动"; move is the default tool and appears first).
 - `BrushSettings.svelte` — brush color, pt-based width, simplify tolerance, automatic smoothing, and snap controls (uses `$bindable` for two-way state binding).
 - `CalibrationSettings.svelte` — real unit length input and grid display toggle.
@@ -70,12 +84,16 @@ The current implementation direction is to keep building a unified Paper.js obje
 Already implemented for that goal:
 
 - Reference images are selectable objects with move, 8-handle resize, rotation, opacity, lock, fit, and reset-transform actions.
+- The image-upload button opens a modal import surface supporting file selection, image drag-and-drop, and `Ctrl+V` clipboard-image paste.
+- The UI and operation-status messages are internationalized in Chinese and English. Chinese is the default; an explicit user selection is persisted in `localStorage`.
+- Selected unlocked reference images support arrow-key position nudging: 1 screen pixel normally and 10 screen pixels with `Shift`; continuous key repeats are grouped into one undo step.
+- Dragging from the body of a locked reference image pans the canvas instead of moving the image. Locked images take hit-test priority over curves underneath for this gesture.
 - Selected reference images can be deleted with `Delete` / `Backspace`, with undo/redo support.
 - Curves are selectable objects on the canvas, not only in the right-side list.
 - A single selected curve exposes editable anchors and Bezier control handles directly on canvas.
 - Multiple selected curves support batch color and stroke-width editing.
 - Undo/redo now covers object edits and calibration changes, not just brush-created curve insertion.
-- UI has been extracted into eight components: Header, Toolbar, BrushSettings, CalibrationSettings, CanvasWorkspace, ObjectPropertiesPanel, CurveListPanel, ExportPanel.
+- UI has been extracted into ten components, including the image-upload dialog and language switcher.
 - Grid-point snapping applies to both brush drawing and curve anchor/control-handle dragging, with the same green preview circle and status feedback.
 - Closed-path snapping works during curve anchor dragging: dragging the first or last anchor of an open curve near the opposite endpoint snaps and auto-closes the curve, using the same snap radius and green preview circle.
 - Image resize handles now include 4 corners and 4 edge midpoints, with hover resize cursors.
@@ -120,7 +138,7 @@ Keep the x-axis horizontal and the y-axis vertical for the first version.
 
 Already present in some form:
 
-- Browser image upload for common image formats.
+- Browser image upload for common image formats through file selection, drag-and-drop, and clipboard paste.
 - Canvas workspace with pan and zoom.
 - Reference image display with opacity control and top-layer rendering for tracing and point picking.
 - Freehand vector brush backed by Paper.js path data.
@@ -141,6 +159,8 @@ Already present in some form:
 - Local persistence for brush post-processing and snap settings, excluding side-panel layout.
 - Reference image object selection, movement, 8-handle resizing, rotation, opacity control, locking, fit-to-canvas, and reset-transform actions.
 - Equal-aspect image resize with `Shift` modifier.
+- Arrow-key position nudging for selected unlocked reference images, with `Shift` acceleration and undo grouping.
+- Canvas panning from the body of a locked reference image.
 - Keyboard deletion of the selected reference image.
 - Canvas click selection for curve objects.
 - Single-curve anchor and control-handle editing on canvas.
@@ -162,7 +182,6 @@ Still incomplete or not yet implemented:
 - Web Worker processing under `src/lib/workers`.
 - API routes under `src/routes/api`.
 - LLM provider abstraction under `src/lib/llm`.
-- Internationalized locale files despite `svelte-i18n` being installed.
 - Full project save/load.
 - Dedicated responsive cleanup for very short viewport heights.
 - Multi-curve canvas edit affordances beyond the current single-curve handle editor.
@@ -192,6 +211,8 @@ Defer until the core workflow is stable:
 - Distance-based snap threshold and angle-based snap tolerance are separate controls; do not reuse the distance threshold for control-point angle snapping.
 - Control-point angle snap previews should remain transient Paper.js preview-layer graphics and must not mutate stored curve data beyond the committed dragged handle position.
 - Reference images should remain on their own Paper.js layer and stay visually above curves and calibration graphics.
+- Locked reference images must not move through pointer dragging or arrow-key nudging; dragging their body in move mode pans the canvas.
+- Image import sources should normalize to a validated image `File` before calling the shared Paper.js image-loading path.
 
 Core geometry types currently include:
 
@@ -264,15 +285,13 @@ pnpm test
 pnpm build
 ```
 
-When Codex runs the development server, run it with escalated execution rather than the default sandbox. Vite/SvelteKit writes startup caches under `.svelte-kit` and `node_modules/.vite`, and sandboxed runs can fail with `EPERM: operation not permitted`. This is a Codex execution-permission requirement, not a requirement for users to run PowerShell as Administrator.
-
 Preferred Codex dev-server command:
 
 ```powershell
-pnpm dev -- --host 127.0.0.1 --port 5189 --strictPort
+pnpm dev --host 127.0.0.1 --port 5189 --strictPort
 ```
 
-For Codex tool calls, request `sandbox_permissions: "require_escalated"` when running this command and use a short justification such as: "Need to start the Vite dev server outside the sandbox because SvelteKit writes startup cache files."
+Do not insert a standalone `--` after `pnpm dev` in this repository. It is forwarded to Vite as an argument and can cause the requested host and port options to be ignored.
 
 Before finishing non-trivial code changes, run the narrowest relevant command first, then broader checks when practical. For core geometry/export changes, run `pnpm test` at minimum.
 
@@ -281,6 +300,7 @@ Before finishing non-trivial code changes, run the narrowest relevant command fi
 - Follow the existing TypeScript and Svelte style.
 - Svelte 5 runes are enabled by `svelte.config.js`; new app code should be compatible with that mode.
 - Use `@lucide/svelte` for UI icons instead of hand-written SVG icons when an icon exists.
+- Keep Chinese and English translation catalogs synchronized when adding or changing user-visible text.
 - Keep UI text concise and workflow-oriented.
 - Avoid turning the tool into a generic editor; prioritize reference image, calibration, tracing, Bezier editing, and TikZ export.
 - When changing coordinate conversion or exporter behavior, add or update Vitest tests in `src/lib/core`.
